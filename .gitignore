@@ -1,0 +1,11 @@
+.build/
+.swiftpm/
+.swarm/
+dist/
+*.icns
+Resources/AppIcon.iconset/
+Resources/AppIcon.icns
+.DS_Store
+*.xcuserstate
+xcuserdata/
+Package.resolved
