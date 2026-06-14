@@ -1,0 +1,31 @@
+<idea-plugin>
+    <id>com.clussters.claude.orchestrator</id>
+    <name>Claude Orchestrator Launcher</name>
+    <version>0.1.0</version>
+    <vendor email="m.mishenko@clussters.com">Clussters</vendor>
+
+    <description><![CDATA[
+        Запускает Claude orchestrator во встроенном Terminal IntelliJ IDEA.<br>
+        Tools → Start Claude Orchestrator (или Ctrl+Shift+O).<br>
+        Открывает диалог выбора агента (по умолчанию доступен только orchestrator),
+        затем создаёт новый вкладочный Terminal с командой
+        <code>claude --agent &lt;agent&gt; --add-dir &lt;projectPath&gt;</code>.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.terminal</depends>
+
+    <actions>
+        <action id="com.clussters.claude.StartOrchestrator"
+                class="com.clussters.claude.StartOrchestratorAction"
+                text="Start Claude Orchestrator"
+                description="Запускает claude --agent orchestrator в Terminal IDEA"
+                icon="com.clussters.claude.ClaudeIcons.Claude">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <add-to-group group-id="MainToolbarRight"
+                          relative-to-action="com.anthropic.code.plugin.actions.OpenClaudeInTerminalAction"
+                          anchor="before"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="control shift O"/>
+        </action>
+    </actions>
+</idea-plugin>
