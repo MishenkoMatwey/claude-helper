@@ -9,3 +9,5 @@ Resources/AppIcon.icns
 *.xcuserstate
 xcuserdata/
 Package.resolved
+__pycache__/
+*.pyc
