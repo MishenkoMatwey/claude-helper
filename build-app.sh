@@ -51,7 +51,10 @@ PLIST
 RES_BUNDLE_PATH="${BUNDLE}/Contents/MacOS/${RES_BUNDLE}"
 if [ -d "${RES_BUNDLE_PATH}" ] && [ ! -f "${RES_BUNDLE_PATH}/Contents/Info.plist" ]; then
   mkdir -p "${RES_BUNDLE_PATH}/Contents/Resources"
-  find "${RES_BUNDLE_PATH}" -maxdepth 1 -type f -exec mv {} "${RES_BUNDLE_PATH}/Contents/Resources/" \;
+  # Move ALL top-level entries (files AND directories, e.g. .copy'd AgentScripts)
+  # into Contents/Resources/ — leaving anything in the bundle root fails codesign.
+  find "${RES_BUNDLE_PATH}" -maxdepth 1 -mindepth 1 ! -name Contents \
+    -exec mv {} "${RES_BUNDLE_PATH}/Contents/Resources/" \;
   cat > "${RES_BUNDLE_PATH}/Contents/Info.plist" <<RESPLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

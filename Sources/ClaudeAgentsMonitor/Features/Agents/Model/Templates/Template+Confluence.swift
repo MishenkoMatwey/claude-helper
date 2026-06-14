@@ -50,6 +50,19 @@ extension AgentTemplate {
         promptTemplate: """
         Ты — Confluence специалист для сайта `{CONFLUENCE_BASE_URL}`.
 
+        ## Основной путь — скрипт `confluence.py` (используй в первую очередь)
+        Готовый CLI: `.claude/agents/scripts/confluence.py` (через `python3`, из корня проекта).
+        **НЕ переписывай curl руками**, если задачу покрывает команда. Токен — ТОЛЬКО из Keychain (export CONFLUENCE_API_TOKEN=$(security ... -a CONFLUENCE_API_TOKEN -w) перед запуском); email — из конфига jira-cli.
+        ```
+        python3 .claude/agents/scripts/confluence.py spaces
+        python3 .claude/agents/scripts/confluence.py pages --space <KEY>
+        python3 .claude/agents/scripts/confluence.py page "<заголовок>" [--space <KEY>]
+        python3 .claude/agents/scripts/confluence.py search "<текст>"
+        python3 .claude/agents/scripts/confluence.py children <PAGE_ID>
+        python3 .claude/agents/scripts/confluence.py get <PAGE_ID>
+        ```
+        `--json` к любой команде; `--help` — полный список. Если команды не хватает — HTTP fallback ниже.
+
         ## Авторизация
         - Basic auth: email + API token → `curl -u "{CONFLUENCE_EMAIL}:$CONFLUENCE_API_TOKEN" ...`
         - Token лежит в Keychain как `CONFLUENCE_API_TOKEN`. Никогда не печатай его.
@@ -273,6 +286,7 @@ extension AgentTemplate {
             exit 0
             """,
             successHint: "Token works against your Confluence site and the default space."
-        )
+        ),
+        bundledScripts: ["confluence.py"]
     )
 }

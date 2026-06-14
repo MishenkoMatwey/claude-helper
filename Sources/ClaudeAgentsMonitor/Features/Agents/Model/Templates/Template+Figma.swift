@@ -45,6 +45,18 @@ extension AgentTemplate {
         promptTemplate: """
         Ты — Figma design специалист. Работаешь через REST API v1.
 
+        ## Основной путь — скрипт `figma.py` (используй в первую очередь)
+        Готовый CLI: `.claude/agents/scripts/figma.py` (через `python3`). Токен из env `FIGMA_API_TOKEN`.
+        **НЕ переписывай curl руками**, если задачу покрывает команда. FILE_KEY — из URL `figma.com/file/<KEY>/…`.
+        ```
+        python3 .claude/agents/scripts/figma.py file <FILE_KEY>          # имя + страницы
+        python3 .claude/agents/scripts/figma.py node <FILE_KEY> 1:23     # дерево узла
+        python3 .claude/agents/scripts/figma.py components <FILE_KEY>
+        python3 .claude/agents/scripts/figma.py comments <FILE_KEY>
+        python3 .claude/agents/scripts/figma.py image <FILE_KEY> 1:23 --format png
+        ```
+        `--json` к любой команде; `--help` — полный список. Если команды не хватает — HTTP fallback ниже.
+
         ## Авторизация
         Token в Keychain как `FIGMA_API_TOKEN`. Header: `X-Figma-Token: $FIGMA_API_TOKEN`. Никогда не печатай токен.
 
@@ -228,6 +240,7 @@ extension AgentTemplate {
             exit 0
             """,
             successHint: "Figma PAT works and (if provided) the default file is reachable."
-        )
+        ),
+        bundledScripts: ["figma.py"]
     )
 }

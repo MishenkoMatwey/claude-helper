@@ -13,6 +13,7 @@ enum SelfTest {
         memoryWiring(suite)
         memoryMigration(suite)
         agentRuns(suite)
+        agentScripts(suite)
         suite.finish()
     }
 
@@ -157,6 +158,31 @@ enum SelfTest {
         s.group("MCP config names") {
             s.expect(MemoryMCPConfig.serverName(for: "be") == "cam-memory-be", "memory server name")
             s.expect(MemoryMCPConfig.agentsServerName == "cam-agents", "agents server name")
+        }
+    }
+
+    private static func agentScripts(_ s: Suite) {
+        s.group("Bundled agent scripts + installer") {
+            // All template scripts must be bundled and discoverable.
+            for name in ["jira.py", "confluence.py", "gitlab.py", "db.py", "figma.py"] {
+                let base = (name as NSString).deletingPathExtension
+                let url = Bundle.module.url(forResource: base, withExtension: "py", subdirectory: "AgentScripts")
+                s.expect(url != nil, "bundled: \(name)")
+            }
+            try withTempDir { dir in
+                let installed = AgentScriptInstaller.install(["jira.py", "gitlab.py"], into: dir)
+                s.expect(installed.count == 2, "installer copied 2 scripts")
+                let f = dir.appendingPathComponent("scripts/jira.py")
+                s.expect(FileManager.default.fileExists(atPath: f.path), "script written to scripts/")
+                let perms = ((try? FileManager.default.attributesOfItem(atPath: f.path))?[.posixPermissions] as? Int) ?? 0
+                s.expect(perms == 0o755, "script is executable")
+            }
+            // Templates reference their scripts.
+            s.expect(AgentTemplate.jira.bundledScripts == ["jira.py"], "jira template ships jira.py")
+            s.expect(AgentTemplate.confluence.bundledScripts == ["confluence.py"], "confluence template ships confluence.py")
+            s.expect(AgentTemplate.git.bundledScripts == ["gitlab.py"], "git template ships gitlab.py")
+            s.expect(AgentTemplate.database.bundledScripts == ["db.py"], "database template ships db.py")
+            s.expect(AgentTemplate.figma.bundledScripts == ["figma.py"], "figma template ships figma.py")
         }
     }
 

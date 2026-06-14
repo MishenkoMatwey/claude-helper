@@ -379,7 +379,29 @@ extension AgentTemplate {
         secretsToSetup: [],
         plainVarsToSetup: [],
         promptTemplate: """
-        Ты — read-only SQL агент. У тебя несколько подключений; для каждого в env есть набор переменных:
+        Ты — read-only SQL агент. У тебя несколько подключений; для каждого в env есть набор переменных.
+
+        ## Быстрый доступ — скрипт `db.py` (postgres, принудительно read-only)
+        Для postgres-слотов используй `.claude/agents/scripts/db.py` (через `python3`): он **сам отклоняет любые не-SELECT**, ставит statement_timeout и лимит строк — безопаснее, чем сырой psql. Маппь слот `DB<N>_*` в стандартные `PG*`-переменные:
+        ```bash
+        host="${DB1_HOST%%:*}"; port="${DB1_HOST##*:}"; [ "$port" = "$host" ] && port=6432
+        IFS=',' read -r db _ <<< "$DB1_DATABASE"; db=$(echo "$db" | xargs)   # первая база из списка
+        PGHOST="$host" PGPORT="$port" PGUSER="$DB1_USER" PGPASSWORD="$DB1_PASSWORD" PGDATABASE="$db" \\
+          python3 .claude/agents/scripts/db.py tables
+        ```
+        Команды: `databases` · `tables [--schema public]` · `schema <table>` · `sample <table>` · `count <table>` · `query "<SELECT…>"`. `--json` для машинного вывода.
+
+        ### Несколько БД на одном хосте
+        `DB<N>_DATABASE` — это **список баз через запятую** (один host/user/password ко всем). Не нужно переэкспортировать env под каждую — используй флаг `--db <name>`:
+        ```bash
+        python3 .claude/agents/scripts/db.py databases                 # все базы хоста
+        python3 .claude/agents/scripts/db.py --db portfolio tables     # конкретная база
+        # перебрать все базы из списка:
+        IFS=',' read -ra DBS <<< "$DB1_DATABASE"
+        for raw in "${DBS[@]}"; do d=$(echo "$raw" | xargs); echo "== $d =="; python3 .claude/agents/scripts/db.py --db "$d" tables; done
+        ```
+        Если задача про конкретную базу — бери её через `--db`; если «во всех» — перебирай список. Полная карта схем — в `references/db-schema.md` (грепай, не читай целиком).
+        Для **не-postgres** (mysql/clickhouse/mssql/sqlite) — нативный клиент/psql как описано ниже.
 
         ## Карта БД (не читай целиком!)
 
@@ -458,6 +480,7 @@ extension AgentTemplate {
             dbConnection(slot: 5, optional: true)
         ],
         postCreateCommand: dbPostCreateCommand,
-        postCreateLabel: "Discovering schema, tables, relations…"
+        postCreateLabel: "Discovering schema, tables, relations…",
+        bundledScripts: ["db.py"]
     )
 }

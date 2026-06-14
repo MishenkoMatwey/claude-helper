@@ -1121,8 +1121,12 @@ struct TemplateAgentSheet: View {
                     bashPatterns.append(contentsOf: p.patterns)
                 }
             }
-            let tools = template.suggestedTools.map(\.rawValue)
+            var tools = template.suggestedTools.map(\.rawValue)
                 + bashPatterns.sorted().map { "Bash(\($0))" }
+            // Templates that ship helper scripts need python3 to run them.
+            if !template.bundledScripts.isEmpty && !tools.contains("Bash(python3:*)") {
+                tools.append("Bash(python3:*)")
+            }
 
             // 2. Resolve skills.
             let chosenSkills = state.agentsVM.availableSkills.filter {
@@ -1138,6 +1142,12 @@ struct TemplateAgentSheet: View {
                 systemPrompt: template.promptTemplate,
                 skills: chosenSkills,
                 overwrite: true
+            )
+
+            // 3b. Install bundled helper scripts into the project's scripts/ dir.
+            AgentScriptInstaller.install(
+                template.bundledScripts,
+                into: agentURL.deletingLastPathComponent()
             )
 
             // 4. Persist plain vars and secrets — trim copy-paste whitespace/newlines.

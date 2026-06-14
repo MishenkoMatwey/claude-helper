@@ -27,6 +27,10 @@ struct AgentTemplate: Identifiable, Hashable {
     /// substitution as `validation.command`, plus `{AGENT_NAME}` and `{AGENT_DIR}`.
     var postCreateCommand: String? = nil
     var postCreateLabel: String = "Initial setup"
+    /// Bundled helper scripts (Resources/AgentScripts/*.py) copied into the project's
+    /// `.claude/agents/scripts/` on creation. When non-empty, the agent also gets
+    /// `Bash(python3:*)` so it can run them. The prompt should reference them.
+    var bundledScripts: [String] = []
 
     static let allBuiltIn: [AgentTemplate] = [.git, .jira, .confluence, .database, .figma]
 

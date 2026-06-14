@@ -64,7 +64,11 @@ extension AgentTemplate {
 
         ## CLI
         - **GitHub**: `gh` CLI — авторизуется через env `GH_TOKEN=$GITHUB_TOKEN`. Команды: `gh pr create`, `gh pr view`, `gh issue list`, `gh repo view`.
-        - **GitLab**: `glab` CLI — авторизуется через env `GITLAB_TOKEN`. Команды: `glab mr create`, `glab mr view`, `glab issue list`. Если `glab` не установлен — fallback на REST: `curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" $GITLAB_HOST/api/v4/...`.
+        - **GitLab**: `glab` CLI — авторизуется через env `GITLAB_TOKEN`. Команды: `glab mr create`, `glab mr view`, `glab issue list`.
+        - **GitLab read через скрипт** (быстрее, чем curl): `.claude/agents/scripts/gitlab.py` —
+          `python3 .claude/agents/scripts/gitlab.py {mrs|mr|issues|pipelines|branches|projects} <group/repo> [--state opened] [--json]`.
+          Токен из env `GITLAB_TOKEN`; для self-hosted запускай как `GITLAB_URL=$GITLAB_HOST python3 .claude/agents/scripts/gitlab.py ...`.
+          Для write (создать MR) — `glab`. Если нужного нет — fallback `curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" $GITLAB_HOST/api/v4/...`.
 
         ## Правила
         - НИКОГДА не делай `git push --force` в main/master без явного разрешения.
@@ -242,6 +246,7 @@ extension AgentTemplate {
             exit 0
             """,
             successHint: "Token works for all repos found in projects directory."
-        )
+        ),
+        bundledScripts: ["gitlab.py"]
     )
 }

@@ -18,7 +18,8 @@ let package = Package(
             ],
             path: "Sources/ClaudeAgentsMonitor",
             resources: [
-                .process("Resources/BrandIcons")
+                .process("Resources/BrandIcons"),
+                .copy("Resources/AgentScripts")
             ]
         )
         // .testTarget — disabled because Command Line Tools without Xcode lacks XCTest/Testing C++ stdlib.
