@@ -10,6 +10,10 @@ final class LocalScheduler: ObservableObject {
     private var lastFiveHourReset: Date?
     private var lastWeeklyReset: Date?
 
+    /// Closure that returns the current agent list — used to resolve the orchestrator's
+    /// actual file name when a schedule targets a workflow. Set from the app container.
+    var agentsProvider: (() -> [Agent])?
+
     init() {
         reload()
         // Tick every 30 seconds.
@@ -111,7 +115,7 @@ final class LocalScheduler: ObservableObject {
         if schedule.backend == .cloud {
             // Cloud backend: handled separately via CloudRoutinesService.
             // For local schedule object marked cloud, we just log a "skipped" run here.
-            output = "Cloud routine — Anthropic выполнит на своей стороне."
+            output = "Cloud routine — Anthropic will execute it on their side."
             success = true
         } else {
             let result = await ClaudeRunner.run(
@@ -155,7 +159,10 @@ final class LocalScheduler: ObservableObject {
         switch schedule.target {
         case .agent(let n): return n
         case .workflow:
-            // Run via orchestrator so it routes the workflow.
+            // Prefer the user's actual orchestrator (renamed via role: orchestrator).
+            if let orch = agentsProvider?().activeOrchestrator() {
+                return orch.name
+            }
             return OrchestratorBuilder.agentName
         }
     }

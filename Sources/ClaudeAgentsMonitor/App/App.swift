@@ -3,6 +3,11 @@ import AppKit
 
 @main
 struct ClaudeAgentsMonitorApp: App {
+    init() {
+        // Headless CLI modes (MCP servers, maintenance, self-test) exit before the GUI.
+        CLI.runIfRequested()
+    }
+
     @StateObject private var state = AppState()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 

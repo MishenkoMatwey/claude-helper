@@ -22,11 +22,11 @@ struct AgentVariablesCard: View {
                 }
                 .buttonStyle(.borderless)
             }
-            Text("Plain → JSON file. Secret → macOS Keychain (`security` CLI). Агент может фетчить через Bash.")
+            Text("Plain → JSON file. Secret → macOS Keychain (`security` CLI). The agent can fetch them via Bash.")
                 .font(.caption2).foregroundStyle(.secondary)
 
             if variables.isEmpty {
-                Text("Переменных нет — добавь ниже.")
+                Text("No variables yet — add one below.")
                     .font(.caption).foregroundStyle(.secondary)
                     .padding(.vertical, 6)
             } else {
@@ -86,7 +86,7 @@ struct AgentVariablesCard: View {
                     } else if let value = state.container.agentVariables.revealSecret(key: v.key, for: agentName) {
                         revealed[v.key] = value
                     } else {
-                        error = "Не удалось прочитать секрет '\(v.key)' (отказ Keychain)"
+                        error = "Failed to read secret '\(v.key)' (Keychain denied)"
                     }
                 } label: {
                     Image(systemName: revealed[v.key] != nil ? "eye.slash" : "eye")
@@ -132,7 +132,7 @@ struct AgentVariablesCard: View {
 
     private var addRow: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Добавить переменную").font(.caption.weight(.semibold))
+            Text("Add variable").font(.caption.weight(.semibold))
             HStack(spacing: 6) {
                 TextField("KEY (UPPER_SNAKE)", text: $newKey)
                     .textFieldStyle(.roundedBorder)

@@ -8,7 +8,7 @@ enum AgentVariablesError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidKey: return "Key должен быть в формате A-Z, 0-9, _ (например DB_PASSWORD)"
+        case .invalidKey: return "Key must be in the format A-Z, 0-9, _ (e.g. DB_PASSWORD)"
         case .keychainFailed(let s): return "Keychain error \(s)"
         case .fileFailed(let m): return "File error: \(m)"
         }
@@ -26,6 +26,13 @@ enum AgentVariablesService {
     }
 
     static func varsFile(for agentName: String) -> URL {
+        // v2 layout: memory/<name>/vars.json
+        AgentLoader.agentsDirectory()
+            .appendingPathComponent("memory/\(agentName)/vars.json")
+    }
+
+    /// Legacy v1 location, kept for one-shot fallback reads during transition.
+    static func legacyVarsFile(for agentName: String) -> URL {
         AgentLoader.agentsDirectory()
             .appendingPathComponent("memory/\(agentName).vars.json")
     }
@@ -33,8 +40,11 @@ enum AgentVariablesService {
     /// Returns all variables: plain ones with values, secrets with empty values + revealed=false.
     static func loadAll(for agentName: String) -> [AgentVariable] {
         var result: [AgentVariable] = []
-        // Plain
-        let plainURL = varsFile(for: agentName)
+        // Plain — try v2 location first, fall back to legacy if v2 file doesn't exist yet.
+        let plainURL: URL = {
+            let v2 = varsFile(for: agentName)
+            return FileManager.default.fileExists(atPath: v2.path) ? v2 : legacyVarsFile(for: agentName)
+        }()
         if let data = try? Data(contentsOf: plainURL),
            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
             for (k, v) in dict.sorted(by: { $0.key < $1.key }) {
@@ -72,6 +82,21 @@ enum AgentVariablesService {
         try? removeKeychain(key: key, service: keychainService(for: agentName))
     }
 
+    // MARK: - Memory mirror (plain vars → v3 memory as kind=var, for search)
+
+    private static func memoryStore() -> MemoryStore? {
+        try? MemoryStore(path: AgentPaths.current.memoryDBFile)
+    }
+
+    /// Mirror every current plain variable of an agent into memory. Secrets stay
+    /// in Keychain (never mirrored). Idempotent — safe to call repeatedly.
+    static func syncToMemory(for agentName: String) {
+        guard let store = memoryStore() else { return }
+        for v in loadAll(for: agentName) where !v.isSecret {
+            try? store.upsertVariable(agent: agentName, key: v.key, value: v.value)
+        }
+    }
+
     static func revealSecret(key: String, for agentName: String) -> String? {
         readKeychain(key: key, service: keychainService(for: agentName))
     }
@@ -96,6 +121,8 @@ enum AgentVariablesService {
         } catch {
             throw AgentVariablesError.fileFailed(error.localizedDescription)
         }
+        // Mirror into v3 memory so the agent finds it via memory_search.
+        try? memoryStore()?.upsertVariable(agent: agentName, key: key, value: value)
     }
 
     private static func removeFromPlain(key: String, agentName: String) {
@@ -111,11 +138,13 @@ enum AgentVariablesService {
                 try? data.write(to: url)
             }
         }
+        // Drop the memory mirror too.
+        try? memoryStore()?.deleteVariable(agent: agentName, key: key)
     }
 
     // MARK: - Keychain
 
-    private static func saveKeychain(key: String, value: String, service: String) throws {
+    static func saveKeychain(key: String, value: String, service: String) throws {
         let data = value.data(using: .utf8) ?? Data()
         // Try update first
         let updateQuery: [String: Any] = [
@@ -142,7 +171,7 @@ enum AgentVariablesService {
         }
     }
 
-    private static func readKeychain(key: String, service: String) -> String? {
+    static func readKeychain(key: String, service: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -156,7 +185,7 @@ enum AgentVariablesService {
         return String(data: data, encoding: .utf8)
     }
 
-    private static func removeKeychain(key: String, service: String) throws {
+    static func removeKeychain(key: String, service: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -168,7 +197,7 @@ enum AgentVariablesService {
         }
     }
 
-    private static func listKeychainKeys(service: String) -> [String] {
+    static func listKeychainKeys(service: String) -> [String] {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

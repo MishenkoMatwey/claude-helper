@@ -6,12 +6,10 @@ Native macOS menu bar app for managing Claude Code subagents, workflows, and sch
 
 - **Menu bar widget** — always-visible 5-hour + weekly usage, active sessions, sparkline of 14-day usage. Real numbers from Claude Code's `/api/oauth/usage` endpoint, not estimates.
 - **Per-project agents** — create, edit, delete agents stored in `<project>/.claude/agents/`. Permissions, skills, MCP servers, secrets per agent.
-- **Visual BPMN workflow editor** — drag-and-drop nodes, conditional branches, auto-layout, validation, live execution via the orchestrator agent.
-- **Schedules** — cron, one-time, or "on rate-limit reset" triggers. Local backend or copy a Claude routine command for cloud scheduling.
+- **Agent memory (v3)** — SQLite-backed notes (facts/rules/playbooks/sessions/vars) with links (graph) and FTS search. Exposed to agents through the `cam-memory` MCP server (`memory_search` / `memory_write` / `memory_link`) so they recall instead of re-reading. Searchable list + graph view in the UI.
+- **Resumable agent sessions** — the orchestrator delegates via the `cam-agents` MCP server (`agent_run` / `agent_continue`): follow-up edits resume the *same* `claude` session, keeping project context loaded (no cold re-read). Background runs (`agent_run background:true`) with `agent_status` / `agent_stop`, monitored and stoppable from the "Running agents" panel.
 - **Plugin browser** — 177+ Claude Code plugins from the official marketplace, one-click enable.
-- **Playbook mining** — extract reusable procedures from past Claude Code sessions via headless `claude -p` calls.
-- **Memory layers** — global SHARED.md + per-agent private journal + structured playbooks. Auto-injected protocol so agents read/write on every task.
-- **Rate-limit auto-resume** — when a workflow hits a 5-hour or weekly limit, it registers a paused execution. When the limit resets, `claude --resume <session>` continues automatically.
+- **Rate-limit auto-resume** — when a run hits a 5-hour or weekly limit, it registers a paused execution; when the limit resets, `claude --resume <session>` continues automatically.
 
 ## Architecture
 
@@ -54,11 +52,30 @@ open dist/ClaudeAgentsMonitor.app
 
 ## Tests
 
-Tests live in `Tests/ClaudeAgentsMonitorTests/` using Swift Testing (`import Testing`). They require **full Xcode** (not just Command Line Tools) because `swift-testing` depends on C++ stdlib. To enable:
+`swift test` requires **full Xcode** (not just Command Line Tools) — `XCTest` / `swift-testing` don't ship with the CLT toolchain. Swift Testing suites live in `Tests/ClaudeAgentsMonitorTests/`; to run them, install Xcode, uncomment the `.testTarget` in `Package.swift`, then `swift test`.
 
-1. Install Xcode from the App Store
-2. Uncomment the `.testTarget` in `Package.swift`
-3. `swift test`
+For the common Command-Line-Tools-only setup, a runnable self-test harness covers the core services (memory store, v2→v3 migration, agent-run store/runner, agent wiring) with no GUI or network:
+
+```sh
+swift build && .build/debug/ClaudeAgentsMonitor --selftest
+```
+
+### Maintenance / headless commands
+
+The same binary doubles as the MCP servers and maintenance CLI (it exits before the GUI):
+
+| Flag | What it does |
+|------|--------------|
+| `--mcp-serve --db <db> --agent <name>` | `cam-memory` MCP server (per agent) |
+| `--agents-serve --project <root>` | `cam-agents` MCP server (resumable/background runs) |
+| `--migrate-all [--project <root>]` | migrate v2 file memory → v3 SQLite |
+| `--rewire-all [--project <root>]` | regenerate agents onto the v3 memory stack |
+| `--rewire-orchestrators [--project <root>]` | rebuild orchestrators with resumable-session tools |
+| `--selftest` | run the self-test harness |
+
+## Subprojects
+
+- [`claude-orchestrator-launcher/`](claude-orchestrator-launcher/) — standalone IntelliJ/JetBrains plugin (Kotlin + Gradle): **Tools → Start Claude Orchestrator** (Ctrl+Shift+O), discovers orchestrators by `.claude/agents/`. Independent build (`./gradlew`), its own `.gitignore`.
 
 ## License
 

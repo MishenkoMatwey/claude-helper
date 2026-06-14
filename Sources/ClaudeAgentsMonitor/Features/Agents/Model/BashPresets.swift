@@ -21,7 +21,7 @@ enum BashPresets {
             category: "Git",
             dangerLevel: .safe,
             patterns: ["git status:*", "git log:*", "git diff:*", "git show:*", "git blame:*", "git branch -l:*", "git remote -v:*"],
-            note: "Только чтение — никаких изменений в репо"
+            note: "Read-only — no changes to the repo"
         ),
         BashPreset(
             label: "Git safe edit",
@@ -34,7 +34,7 @@ enum BashPresets {
                 "git branch:*", "git stash:*", "git tag:*",
                 "git pull:*", "git fetch:*", "git merge:*", "git rebase:*"
             ],
-            note: "Локальные изменения + pull/fetch/merge. БЕЗ push, remote, reset --hard."
+            note: "Local changes + pull/fetch/merge. No push, remote, or reset --hard."
         ),
         BashPreset(
             label: "Git push allowed",
@@ -42,7 +42,7 @@ enum BashPresets {
             category: "Git",
             dangerLevel: .moderate,
             patterns: ["git push:*"],
-            note: "Только push. Не включает force-push (`git push --force` всё равно нужно отдельно)."
+            note: "Push only. Does not include force-push (`git push --force` still needs to be added separately)."
         ),
         BashPreset(
             label: "Git everything (DANGER)",
@@ -50,7 +50,7 @@ enum BashPresets {
             category: "Git",
             dangerLevel: .dangerous,
             patterns: ["git:*"],
-            note: "Все git-команды включая force-push, reset --hard, remote remove. Используй с осторожностью."
+            note: "All git commands including force-push, reset --hard, remote remove. Use with caution."
         ),
 
         // GitHub CLI
@@ -60,7 +60,7 @@ enum BashPresets {
             category: "Git",
             dangerLevel: .moderate,
             patterns: ["gh:*"],
-            note: "Все gh команды — PR, issues, releases"
+            note: "All gh commands — PRs, issues, releases"
         ),
 
         // npm / pnpm / yarn
@@ -114,7 +114,7 @@ enum BashPresets {
             category: "Containers",
             dangerLevel: .safe,
             patterns: ["docker ps:*", "docker logs:*", "docker images:*", "docker inspect:*"],
-            note: "Только чтение состояния"
+            note: "Read state only"
         ),
         BashPreset(
             label: "Docker (full)",
@@ -122,7 +122,7 @@ enum BashPresets {
             category: "Containers",
             dangerLevel: .moderate,
             patterns: ["docker:*"],
-            note: "Все docker-команды включая run/build/rm"
+            note: "All docker commands including run/build/rm"
         ),
         BashPreset(
             label: "Kubectl (read)",
@@ -130,7 +130,7 @@ enum BashPresets {
             category: "Containers",
             dangerLevel: .safe,
             patterns: ["kubectl get:*", "kubectl describe:*", "kubectl logs:*", "kubectl top:*"],
-            note: "Только чтение state кластера"
+            note: "Cluster state read-only"
         ),
 
         // File system / read-only utils
@@ -140,7 +140,7 @@ enum BashPresets {
             category: "Files",
             dangerLevel: .safe,
             patterns: ["ls:*", "cat:*", "head:*", "tail:*", "less:*", "wc:*", "stat:*", "file:*", "tree:*"],
-            note: "Чтение файлов и листинг"
+            note: "File reading and listing"
         ),
         BashPreset(
             label: "Search utils",
@@ -148,7 +148,7 @@ enum BashPresets {
             category: "Files",
             dangerLevel: .safe,
             patterns: ["grep:*", "rg:*", "find:*", "fd:*", "awk:*", "sed -n:*"],
-            note: "grep/find/awk без in-place edit"
+            note: "grep/find/awk without in-place edit"
         ),
 
         // Network
@@ -218,7 +218,7 @@ enum BashPresets {
             category: "Cloud",
             dangerLevel: .moderate,
             patterns: ["aws:*"],
-            note: "Полный AWS — ВСЕ действия включая delete-bucket, terminate-instance"
+            note: "Full AWS — ALL actions including delete-bucket, terminate-instance"
         ),
         BashPreset(
             label: "AWS read-only",
@@ -226,7 +226,7 @@ enum BashPresets {
             category: "Cloud",
             dangerLevel: .safe,
             patterns: ["aws s3 ls:*", "aws s3 cp:*", "aws ec2 describe:*", "aws logs:*", "aws iam list:*"],
-            note: "Только чтение AWS"
+            note: "AWS read-only"
         ),
         BashPreset(
             label: "Google Cloud",
@@ -260,7 +260,7 @@ enum BashPresets {
             category: "Infra",
             dangerLevel: .safe,
             patterns: ["terraform plan:*", "terraform validate:*", "terraform fmt:*", "terraform show:*", "terraform output:*"],
-            note: "Без apply/destroy"
+            note: "No apply/destroy"
         ),
         BashPreset(
             label: "Terraform (full)",
@@ -268,7 +268,7 @@ enum BashPresets {
             category: "Infra",
             dangerLevel: .dangerous,
             patterns: ["terraform:*"],
-            note: "Включая apply/destroy — может поднять/снести инфру"
+            note: "Includes apply/destroy — can provision or tear down infra"
         ),
         BashPreset(
             label: "Ansible (check only)",
@@ -276,7 +276,7 @@ enum BashPresets {
             category: "Infra",
             dangerLevel: .safe,
             patterns: ["ansible --check:*", "ansible-playbook --check:*"],
-            note: "Dry-run без изменений"
+            note: "Dry-run, no changes"
         ),
         BashPreset(
             label: "Helm",
@@ -294,7 +294,7 @@ enum BashPresets {
             category: "Databases",
             dangerLevel: .safe,
             patterns: ["psql -c SELECT:*", "psql -c \\\\d:*", "psql -c \\\\l:*"],
-            note: "Только SELECT и \\d \\l"
+            note: "Only SELECT and \\d \\l"
         ),
         BashPreset(
             label: "psql (full)",
@@ -302,7 +302,7 @@ enum BashPresets {
             category: "Databases",
             dangerLevel: .dangerous,
             patterns: ["psql:*"],
-            note: "Полный доступ — DELETE, DROP включены"
+            note: "Full access — DELETE, DROP included"
         ),
         BashPreset(
             label: "redis-cli",
@@ -328,7 +328,7 @@ enum BashPresets {
             category: "System",
             dangerLevel: .safe,
             patterns: ["ps:*", "top:*", "lsof:*", "netstat:*", "ss:*", "df:*", "du:*", "uptime:*", "uname:*"],
-            note: "Только чтение состояния системы"
+            note: "System state read-only"
         ),
         BashPreset(
             label: "systemctl (read)",
@@ -344,7 +344,7 @@ enum BashPresets {
             category: "System",
             dangerLevel: .safe,
             patterns: ["brew list:*", "brew info:*", "brew search:*"],
-            note: "Только read — без install/uninstall"
+            note: "Read only — no install/uninstall"
         ),
 
         // SSH / Remote
@@ -354,7 +354,7 @@ enum BashPresets {
             category: "Network",
             dangerLevel: .moderate,
             patterns: ["ssh:*"],
-            note: "Полный SSH — может выполнять что угодно на удалённой машине"
+            note: "Full SSH — can execute anything on the remote machine"
         ),
         BashPreset(
             label: "SCP / rsync",
@@ -362,7 +362,7 @@ enum BashPresets {
             category: "Network",
             dangerLevel: .moderate,
             patterns: ["scp:*", "rsync:*"],
-            note: "Копирование файлов"
+            note: "File copying"
         ),
 
         // JSON / YAML utils
@@ -460,7 +460,7 @@ enum BashPresets {
             category: "JVM",
             dangerLevel: .moderate,
             patterns: ["./mvnw spring-boot:run:*", "mvn spring-boot:run:*", "./gradlew bootRun:*"],
-            note: "Запуск сервиса локально"
+            note: "Run the service locally"
         ),
         BashPreset(
             label: "Java inspect (jstack/jmap)",
@@ -468,7 +468,7 @@ enum BashPresets {
             category: "JVM",
             dangerLevel: .safe,
             patterns: ["jstack:*", "jmap:*", "jcmd:*", "jstat:*", "jinfo:*", "java -version:*", "javac -version:*"],
-            note: "Диагностика JVM процессов"
+            note: "JVM process diagnostics"
         ),
 
         // ─── Kafka ───
@@ -478,7 +478,7 @@ enum BashPresets {
             category: "Messaging",
             dangerLevel: .safe,
             patterns: ["kafka-topics --list:*", "kafka-topics --describe:*"],
-            note: "Только список + describe"
+            note: "List + describe only"
         ),
         BashPreset(
             label: "Kafka topics (full)",
@@ -486,7 +486,7 @@ enum BashPresets {
             category: "Messaging",
             dangerLevel: .moderate,
             patterns: ["kafka-topics:*"],
-            note: "Включая create/delete topic"
+            note: "Includes create/delete topic"
         ),
         BashPreset(
             label: "Kafka consumer/producer",
@@ -494,7 +494,7 @@ enum BashPresets {
             category: "Messaging",
             dangerLevel: .moderate,
             patterns: ["kafka-console-consumer:*", "kafka-console-producer:*", "kafka-consumer-groups:*"],
-            note: "Чтение/запись сообщений + управление group offset"
+            note: "Read/write messages + manage group offsets"
         ),
         BashPreset(
             label: "kcat (kafkacat)",
@@ -502,7 +502,7 @@ enum BashPresets {
             category: "Messaging",
             dangerLevel: .moderate,
             patterns: ["kcat:*", "kafkacat:*"],
-            note: "Универсальный CLI для Kafka"
+            note: "Universal CLI for Kafka"
         ),
 
         // ─── Postgres admin ───
@@ -512,7 +512,7 @@ enum BashPresets {
             category: "Databases",
             dangerLevel: .moderate,
             patterns: ["pg_dump:*", "pg_restore:*"],
-            note: "Бэкап и восстановление"
+            note: "Backup and restore"
         ),
         BashPreset(
             label: "Postgres tools",
@@ -520,7 +520,7 @@ enum BashPresets {
             category: "Databases",
             dangerLevel: .safe,
             patterns: ["pg_isready:*", "pgbench:*", "vacuumdb:*", "createdb:*"],
-            note: "Утилиты администрирования"
+            note: "Administration utilities"
         ),
         BashPreset(
             label: "Flyway",
@@ -528,7 +528,7 @@ enum BashPresets {
             category: "Databases",
             dangerLevel: .moderate,
             patterns: ["flyway:*", "./mvnw flyway:*", "./gradlew flywayMigrate:*"],
-            note: "Миграции БД"
+            note: "DB migrations"
         ),
         BashPreset(
             label: "Liquibase",
@@ -536,7 +536,7 @@ enum BashPresets {
             category: "Databases",
             dangerLevel: .moderate,
             patterns: ["liquibase:*"],
-            note: "Миграции БД"
+            note: "DB migrations"
         ),
 
         // ─── Misc dev ───

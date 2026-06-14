@@ -6,24 +6,8 @@ struct AgentDetailView: View {
     let agent: Agent
     @State private var showDeleteConfirm: Bool = false
     @State private var deleteError: String?
-    @State private var showExtractSheet: Bool = false
-    @State private var showMineSheet: Bool = false
     @State private var trainCopied: Bool = false
-
-    private func privateMemoryURL(for agent: Agent) -> URL {
-        state.container.agentRepository.agentsDirectory()
-            .appendingPathComponent("memory/\(agent.name).md")
-    }
-
-    private func playbooksURL(for agent: Agent) -> URL {
-        state.container.agentRepository.agentsDirectory()
-            .appendingPathComponent("memory/\(agent.name).playbooks.md")
-    }
-
-    private func sharedMemoryURL() -> URL {
-        state.container.agentRepository.agentsDirectory()
-            .appendingPathComponent("SHARED.md")
-    }
+    @State private var showIdentityEditor: Bool = false
 
     private func trainCommand() -> String {
         "claude --agent \(agent.name) --append-system-prompt 'TRAINING MODE: подробно документируй каждый шаг. После задачи ОБЯЗАТЕЛЬНО создай или обнови playbook в ~/.claude/agents/memory/\(agent.name).playbooks.md и покажи мне для подтверждения.'"
@@ -35,26 +19,11 @@ struct AgentDetailView: View {
                 header
                 metaCard
                 AgentPermissionsCard(agent: agent)
-                permissionsCard
                 if !agent.attachedSkills.isEmpty {
                     skillsCard
                 }
                 AgentVariablesCard(agentName: agent.name)
-                MemoryEditorView(
-                    title: "Playbooks",
-                    path: playbooksURL(for: agent),
-                    placeholder: "# \(agent.name) — playbooks\n\n_Структурированные процедуры. Заполнятся автоматически или через Extract._\n"
-                )
-                MemoryEditorView(
-                    title: "Private memory (журнал)",
-                    path: privateMemoryURL(for: agent),
-                    placeholder: "# \(agent.name) — private memory\n\n_Записи появятся здесь по мере работы агента._\n"
-                )
-                MemoryEditorView(
-                    title: "Shared memory (все агенты)",
-                    path: sharedMemoryURL(),
-                    placeholder: "# Shared agent memory\n"
-                )
+                AgentMemoryV3Card(agentName: agent.name)
                 promptCard
             }
             .padding(20)
@@ -68,52 +37,68 @@ struct AgentDetailView: View {
         .sheet(item: $state.agentsVM.editingAgent) { editing in
             NewAgentSheet(editing: editing).environmentObject(state)
         }
-        .sheet(isPresented: $showExtractSheet) {
-            ExtractPlaybookSheet(agent: agent)
-                .environmentObject(state)
-        }
-        .sheet(isPresented: $showMineSheet) {
-            MinePlaybooksSheet(agent: agent)
-                .environmentObject(state)
+        .sheet(isPresented: $showIdentityEditor) {
+            AgentIdentityEditor(agent: agent).environmentObject(state)
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let desc = AgentTemplate.iconDescriptor(for: agent)
+        return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Image(systemName: "person.crop.circle.fill").font(.largeTitle)
-                    .foregroundStyle(.tint)
+                Button {
+                    showIdentityEditor = true
+                } label: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10).fill(desc.color.opacity(0.15))
+                            .frame(width: 44, height: 44)
+                        TemplateIcon(assetIcon: desc.asset, sfSymbol: desc.symbol,
+                                     tint: desc.color, size: 26)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Click to change icon or rename")
                 VStack(alignment: .leading) {
-                    Text(agent.name).font(.title.bold())
+                    HStack(spacing: 6) {
+                        Text(agent.name).font(.title.bold())
+                        Button {
+                            showIdentityEditor = true
+                        } label: {
+                            Image(systemName: "pencil.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Rename / change icon")
+                    }
                     if !agent.description.isEmpty {
                         Text(agent.description).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
-                Button {
-                    copyTrainCommand()
+                Menu {
+                    Button {
+                        launchTrainingInTerminal()
+                    } label: {
+                        Label("Open in Terminal", systemImage: "terminal")
+                    }
+                    Button {
+                        launchTrainingInITerm()
+                    } label: {
+                        Label("Open in iTerm", systemImage: "terminal.fill")
+                    }
+                    Divider()
+                    Button {
+                        copyTrainCommand()
+                    } label: {
+                        Label(trainCopied ? "Copied!" : "Copy command", systemImage: "doc.on.doc")
+                    }
                 } label: {
-                    Label(trainCopied ? "Copied!" : "Train…", systemImage: "graduationcap.fill")
+                    Label("Train…", systemImage: "graduationcap.fill")
                 }
-                .buttonStyle(.bordered)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
                 .tint(.blue)
-                .help("Copy CLI command for training mode session")
-                Button {
-                    showMineSheet = true
-                } label: {
-                    Label("Mine", systemImage: "rectangle.stack.badge.plus")
-                }
-                .buttonStyle(.bordered)
-                .tint(.indigo)
-                .help("Auto-scan recent sessions and collect all playbooks found")
-                Button {
-                    showExtractSheet = true
-                } label: {
-                    Label("Extract", systemImage: "wand.and.stars")
-                }
-                .buttonStyle(.bordered)
-                .tint(.purple)
-                .help("Pick a single session and extract one playbook")
+                .help("Run agent in TRAINING MODE — agent documents every step into memory")
                 Button {
                     state.agentsVM.editingAgent = agent
                 } label: {
@@ -147,6 +132,47 @@ struct AgentDetailView: View {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             await MainActor.run { trainCopied = false }
         }
+    }
+
+    private func launchTrainingInTerminal() {
+        let projectPath = state.projectsVM.currentProject.path
+        // Escape both for JSON-like AppleScript and for shell.
+        let cmd = trainCommand()
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let cd = projectPath.replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "cd \\"\(cd)\\" && \(cmd)"
+        end tell
+        """
+        runOsascript(script)
+    }
+
+    private func launchTrainingInITerm() {
+        let projectPath = state.projectsVM.currentProject.path
+        let cmd = trainCommand()
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let cd = projectPath.replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+        tell application "iTerm"
+            activate
+            create window with default profile
+            tell current session of current window
+                write text "cd \\"\(cd)\\" && \(cmd)"
+            end tell
+        end tell
+        """
+        runOsascript(script)
+    }
+
+    private func runOsascript(_ script: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        try? process.run()
     }
 
     private var skillsCard: some View {
@@ -183,29 +209,6 @@ struct AgentDetailView: View {
             chip("File", agent.filePath.lastPathComponent)
             chip("Memory", agent.memoryPath != nil ? "yes" : "—")
         }
-    }
-
-    private var permissionsCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Permissions / tools").font(.headline)
-            if agent.tools.isEmpty {
-                Text("Inherits all parent tools").foregroundStyle(.secondary)
-            } else {
-                FlowLayout(spacing: 6) {
-                    ForEach(agent.tools, id: \.self) { tool in
-                        Text(tool)
-                            .font(.system(.caption, design: .monospaced))
-                            .padding(.horizontal, 8).padding(.vertical, 4)
-                            .background(Color.accentColor.opacity(0.15))
-                            .clipShape(Capsule())
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DS.Color.surfaceElevated)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var promptCard: some View {

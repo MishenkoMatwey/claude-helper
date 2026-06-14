@@ -48,6 +48,11 @@ enum MCPRegistry {
             }
         }
 
-        return allServers.values.sorted { $0.name < $1.name }
+        // Hide MCP servers we don't actually integrate with — keeps the agent form
+        // focused on servers that meaningfully matter for subagents.
+        let hidden: Set<String> = ["ruflo"]
+        return allServers.values
+            .filter { !hidden.contains($0.name) }
+            .sorted { $0.name < $1.name }
     }
 }

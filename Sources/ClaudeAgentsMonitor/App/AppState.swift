@@ -21,17 +21,18 @@ final class AppState: ObservableObject {
         self.container = container
 
         // Construct feature view models with their dependencies.
-        let projectsVM = ProjectsViewModel(repository: container.projectRepository)
-        // onSwitch wired below once all VMs exist
+        // ProjectsViewModel needs an onSwitch callback — set as a holder we fill below.
+        var refreshHolder: (() -> Void) = {}
+        let projectsVM = ProjectsViewModel(
+            repository: container.projectRepository,
+            onSwitch: { refreshHolder() }
+        )
         let agentsVM = AgentsViewModel(
             agentRepository: container.agentRepository,
             skillRepository: container.skillRepository,
             mcpRepository: container.mcpRepository
         )
-        let workflowsVM = WorkflowsViewModel(
-            workflowRepository: container.workflowRepository,
-            getAgents: { [weak agentsVM] in agentsVM?.agents ?? [] }
-        )
+        let workflowsVM = WorkflowsViewModel(workflowRepository: container.workflowRepository)
         let schedulesVM = SchedulesViewModel()
         let tokensVM = TokenUsageViewModel(
             tokenStats: container.tokenStats,
@@ -43,6 +44,10 @@ final class AppState: ObservableObject {
         self.workflowsVM = workflowsVM
         self.schedulesVM = schedulesVM
         self.tokensVM = tokensVM
+
+        // Wire scheduler so it can resolve the renamed orchestrator name when
+        // a schedule targets a workflow.
+        schedulesVM.scheduler.agentsProvider = { [weak agentsVM] in agentsVM?.agents ?? [] }
 
         // Forward feature changes upward so views observing AppState repaint.
         let upward: () -> Void = { [weak self] in self?.objectWillChange.send() }
@@ -66,6 +71,7 @@ final class AppState: ObservableObject {
             }
         }
 
+        refreshHolder = { [weak self] in self?.refresh() }
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }

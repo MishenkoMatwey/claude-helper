@@ -99,7 +99,7 @@ struct PluginsBrowserSheet: View {
                     EmptyState(
                         icon: "puzzlepiece.extension",
                         title: "Nothing found",
-                        subtitle: "Сбрось фильтры или измени запрос."
+                        subtitle: "Reset filters or change your query."
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -127,7 +127,7 @@ struct PluginsBrowserSheet: View {
                     StatusBadge(text: plugin.displayCategory, color: categoryColor(plugin.displayCategory))
                     if !plugin.isLocallyAvailable {
                         StatusBadge(text: "remote", color: DS.Color.textTertiary)
-                            .help("Будет скачан при первом включении")
+                            .help("Will be downloaded on first enable")
                     }
                     if let author = plugin.authorName {
                         Text("by \(author)")
@@ -180,10 +180,10 @@ struct PluginsBrowserSheet: View {
                      ? AnyButtonStyle(GhostButtonStyle(tint: DS.Color.success))
                      : AnyButtonStyle(PressableButtonStyle()))
         .help(plugin.isEnabled
-              ? "Disable — снять галочку в settings.json"
+              ? "Disable — uncheck in settings.json"
               : (plugin.isLocallyAvailable
-                 ? "Enable — добавит \(plugin.id) в settings.json"
-                 : "Enable — будет скачан при следующем запуске Claude Code"))
+                 ? "Enable — adds \(plugin.id) to settings.json"
+                 : "Enable — will be downloaded on next Claude Code launch"))
     }
 
     private func categoryColor(_ cat: String) -> Color {

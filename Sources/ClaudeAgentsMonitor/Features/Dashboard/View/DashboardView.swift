@@ -5,13 +5,12 @@ enum DetailSelection: Hashable {
     case overview
     case project(String)
     case agent(String)
-    case workflow(String)
-    case schedule(String)
 }
 
 struct DashboardView: View {
     @EnvironmentObject var state: AppState
     @State private var selection: DetailSelection? = .overview
+    @State private var showNewAgentPopover: Bool = false
 
     var body: some View {
         NavigationSplitView {
@@ -21,14 +20,6 @@ struct DashboardView: View {
             case .agent(let id):
                 if let agent = state.agentsVM.agents.first(where: { $0.id == id }) {
                     AgentDetailView(agent: agent)
-                } else { overview }
-            case .workflow(let id):
-                if let wf = state.workflowsVM.workflows.first(where: { $0.id == id }) {
-                    WorkflowDetailView(workflow: wf)
-                } else { overview }
-            case .schedule(let id):
-                if let s = state.schedulesVM.scheduler.schedules.first(where: { $0.id == id }) {
-                    ScheduleDetailView(schedule: s)
                 } else { overview }
             case .project(let id):
                 if let project = state.projectsVM.allProjects.first(where: { $0.id == id }) {
@@ -44,20 +35,11 @@ struct DashboardView: View {
         .toolbar {
             ToolbarItem {
                 Button {
-                    state.workflowsVM.generateOrchestrator()
-                } label: {
-                    Image(systemName: "bolt.fill")
-                }
-                .help("Build orchestrator — пересобрать orchestrator-агента из текущих агентов и workflows")
-                .accessibilityLabel("Build orchestrator")
-            }
-            ToolbarItem {
-                Button {
                     state.projectsVM.showPluginsBrowserSheet = true
                 } label: {
                     Image(systemName: "puzzlepiece.extension.fill")
                 }
-                .help("Browse plugins — каталог 177+ Claude Code плагинов с включением одной кнопкой")
+                .help("Browse plugins — catalog of 177+ Claude Code plugins with one-click enable")
                 .accessibilityLabel("Browse plugins")
             }
             ToolbarItem {
@@ -78,17 +60,8 @@ struct DashboardView: View {
         .sheet(isPresented: $state.agentsVM.showNewAgentSheet) {
             NewAgentSheet().environmentObject(state)
         }
-        .sheet(isPresented: $state.workflowsVM.showNewWorkflowSheet) {
-            NewWorkflowSheet().environmentObject(state)
-        }
-        .sheet(item: $state.workflowsVM.editingWorkflow) { wf in
-            NewWorkflowSheet(editing: wf).environmentObject(state)
-        }
-        .sheet(isPresented: $state.schedulesVM.showNewScheduleSheet) {
-            NewScheduleSheet().environmentObject(state)
-        }
-        .sheet(item: $state.schedulesVM.editingSchedule) { s in
-            NewScheduleSheet(editing: s).environmentObject(state)
+        .sheet(item: $state.agentsVM.creatingFromTemplate) { tpl in
+            TemplateAgentSheet(template: tpl).environmentObject(state)
         }
         .sheet(isPresented: $state.projectsVM.showAddProjectSheet) {
             AddProjectSheet().environmentObject(state)
@@ -98,29 +71,6 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $state.projectsVM.showPluginsBrowserSheet) {
             PluginsBrowserSheet().environmentObject(state)
-        }
-        .overlay(alignment: .top) {
-            if let result = state.workflowsVM.orchestratorBuildResult {
-                Text(result)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(.thinMaterial)
-                    .clipShape(Capsule())
-                    .padding(.top, 8)
-                    .transition(.opacity)
-            }
-        }
-        .animation(.default, value: state.workflowsVM.orchestratorBuildResult)
-        .onChange(of: state.workflowsVM.pendingSelectionWorkflowId) { _, newValue in
-            if let id = newValue {
-                selection = .workflow(id)
-                state.workflowsVM.pendingSelectionWorkflowId = nil
-            }
-        }
-        .onChange(of: state.schedulesVM.pendingSelectionScheduleId) { _, newValue in
-            if let id = newValue {
-                selection = .schedule(id)
-                state.schedulesVM.pendingSelectionScheduleId = nil
-            }
         }
     }
 
@@ -177,7 +127,7 @@ struct DashboardView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Дашборд: лимиты, графики токенов, активные сессии")
+        .help("Dashboard: limits, token charts, active sessions")
     }
 
     private var projectsList: some View {
@@ -264,7 +214,7 @@ struct DashboardView: View {
                                 }
                             }
                             if !isExpanded {
-                                Text("\(counts.agents) agent\(counts.agents == 1 ? "" : "s") · \(counts.workflows) workflow\(counts.workflows == 1 ? "" : "s") · \(counts.schedules) schedule\(counts.schedules == 1 ? "" : "s")")
+                                Text("\(counts.agents) agent\(counts.agents == 1 ? "" : "s")")
                                     .font(DS.Typo.caption)
                                     .foregroundStyle(DS.Color.textTertiary)
                                     .lineLimit(1)
@@ -339,7 +289,7 @@ struct DashboardView: View {
         .menuIndicator(.hidden)
         .frame(width: 24)
         .help(project.isGlobal
-              ? "Open / Switch (User project — нельзя переименовать или удалить)"
+              ? "Open / Switch (User project — cannot be renamed or removed)"
               : "Open / Rename / Remove project")
     }
 
@@ -348,54 +298,24 @@ struct DashboardView: View {
         // Only show interactive nested items if this is the CURRENT project — otherwise we don't have its loaded data.
         if project.id == state.projectsVM.currentProject.id {
             VStack(alignment: .leading, spacing: DS.Space.m) {
+                if let orch = state.agentsVM.agents.activeOrchestrator() {
+                    orchestratorPanel(orch)
+                }
                 projectSubsection(
                     key: "agents",
                     title: "AGENTS", count: state.agentsVM.userAgents.count, icon: "person.2.fill",
                     addTint: DS.Color.accent,
                     addAction: { state.agentsVM.showNewAgentSheet = true },
-                    addHelp: "New agent in \(project.name)"
+                    addHelp: "New agent in \(project.name)",
+                    addOverride: AnyView(newAgentAddControl)
                 ) {
-                    ForEach(state.agentsVM.agents) { agent in
+                    ForEach(state.agentsVM.userAgents) { agent in
                         nestedNavLink(
                             value: DetailSelection.agent(agent.id),
                             content: agentRow(agent)
                         )
                         .contextMenu {
                             agentContextMenu(agent)
-                        }
-                    }
-                }
-                projectSubsection(
-                    key: "workflows",
-                    title: "WORKFLOWS", count: state.workflowsVM.workflows.count, icon: "rectangle.connected.to.line.below",
-                    addTint: DS.Color.purple,
-                    addAction: { state.workflowsVM.showNewWorkflowSheet = true },
-                    addHelp: "New workflow chaining agents"
-                ) {
-                    ForEach(state.workflowsVM.workflows) { wf in
-                        nestedNavLink(
-                            value: DetailSelection.workflow(wf.id),
-                            content: workflowRow(wf)
-                        )
-                        .contextMenu {
-                            workflowContextMenu(wf)
-                        }
-                    }
-                }
-                projectSubsection(
-                    key: "schedules",
-                    title: "SCHEDULES", count: state.schedulesVM.scheduler.schedules.count, icon: "calendar",
-                    addTint: DS.Color.success,
-                    addAction: { state.schedulesVM.showNewScheduleSheet = true },
-                    addHelp: "Schedule a task"
-                ) {
-                    ForEach(state.schedulesVM.scheduler.schedules) { s in
-                        nestedNavLink(
-                            value: DetailSelection.schedule(s.id),
-                            content: scheduleRow(s)
-                        )
-                        .contextMenu {
-                            scheduleContextMenu(s)
                         }
                     }
                 }
@@ -421,6 +341,8 @@ struct DashboardView: View {
         addTint: Color,
         addAction: @escaping () -> Void,
         addHelp: String,
+        addMenu: AnyView? = nil,
+        addOverride: AnyView? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         let isExpanded = state.projectsVM.expandedSubsection[key] ?? true
@@ -451,24 +373,50 @@ struct DashboardView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                Button {
-                    addAction()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(addTint)
-                        .frame(width: 22, height: 22)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5)
-                                .fill(addTint.opacity(0.10))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 5)
-                                        .stroke(addTint.opacity(0.30), lineWidth: 1)
-                                )
-                        )
+                if let override = addOverride {
+                    override
+                } else if let menu = addMenu {
+                    Menu {
+                        menu
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(addTint)
+                            .frame(width: 22, height: 22)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(addTint.opacity(0.10))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .stroke(addTint.opacity(0.30), lineWidth: 1)
+                                    )
+                            )
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .frame(width: 22, height: 22)
+                    .help(addHelp)
+                } else {
+                    Button {
+                        addAction()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(addTint)
+                            .frame(width: 22, height: 22)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(addTint.opacity(0.10))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .stroke(addTint.opacity(0.30), lineWidth: 1)
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(addHelp)
                 }
-                .buttonStyle(.plain)
-                .help(addHelp)
             }
             .padding(.horizontal, DS.Space.s)
             if isExpanded {
@@ -477,6 +425,102 @@ struct DashboardView: View {
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isExpanded)
+    }
+
+    /// Custom `+` button next to AGENTS. Opens a popover with colored template cards
+    /// instead of macOS's default Menu (whose Labels swallow our color tokens).
+    @ViewBuilder
+    private var newAgentAddControl: some View {
+        Button {
+            showNewAgentPopover.toggle()
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(DS.Color.accent)
+                .frame(width: 22, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(DS.Color.accent.opacity(0.10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(DS.Color.accent.opacity(0.30), lineWidth: 1)
+                        )
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("New agent")
+        .popover(isPresented: $showNewAgentPopover, arrowEdge: .bottom) {
+            newAgentPopoverContent
+        }
+    }
+
+    private var newAgentPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            popoverHeader("Create agent")
+            newAgentPopoverRow(
+                asset: nil, sfSymbol: "person.crop.circle.badge.plus",
+                tint: DS.Color.accent,
+                title: "Blank agent",
+                subtitle: "Start from an empty markdown file"
+            ) {
+                showNewAgentPopover = false
+                state.agentsVM.showNewAgentSheet = true
+            }
+            Divider().padding(.vertical, 4)
+            popoverHeader("From template")
+            ForEach(AgentTemplate.allBuiltIn) { tpl in
+                newAgentPopoverRow(
+                    asset: tpl.assetIcon, sfSymbol: tpl.icon,
+                    tint: AgentTemplate.swiftUIColor(tpl.color),
+                    title: tpl.name,
+                    subtitle: tpl.description
+                ) {
+                    showNewAgentPopover = false
+                    state.agentsVM.creatingFromTemplate = tpl
+                }
+            }
+        }
+        .padding(DS.Space.s)
+        .frame(width: 340)
+    }
+
+    private func popoverHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(DS.Typo.micro)
+            .tracking(0.8)
+            .foregroundStyle(DS.Color.textTertiary)
+            .padding(.horizontal, 6)
+            .padding(.top, 2)
+    }
+
+    private func newAgentPopoverRow(
+        asset: String?, sfSymbol: String,
+        tint: Color, title: String, subtitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7).fill(tint.opacity(0.15))
+                        .frame(width: 32, height: 32)
+                    TemplateIcon(assetIcon: asset, sfSymbol: sfSymbol, tint: tint, size: 18)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(DS.Typo.bodyMedium)
+                    Text(subtitle)
+                        .font(DS.Typo.caption)
+                        .foregroundStyle(DS.Color.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PopoverRowButtonStyle())
+        .focusable(false)
     }
 
     @ViewBuilder
@@ -496,47 +540,6 @@ struct DashboardView: View {
             state.refresh()
         } label: {
             Label("Delete agent", systemImage: "trash")
-        }
-    }
-
-    @ViewBuilder
-    private func workflowContextMenu(_ wf: Workflow) -> some View {
-        Button { selection = .workflow(wf.id) } label: {
-            Label("Open", systemImage: "arrow.right.circle")
-        }
-        Button { state.workflowsVM.editingWorkflow = wf } label: {
-            Label("Edit name / triggers", systemImage: "pencil")
-        }
-        Divider()
-        Button(role: .destructive) {
-            try? state.container.workflowRepository.delete(wf)
-            state.refresh()
-        } label: {
-            Label("Delete workflow", systemImage: "trash")
-        }
-    }
-
-    @ViewBuilder
-    private func scheduleContextMenu(_ s: Schedule) -> some View {
-        Button { selection = .schedule(s.id) } label: {
-            Label("Open", systemImage: "arrow.right.circle")
-        }
-        Button { state.schedulesVM.scheduler.runNow(s) } label: {
-            Label("Run now", systemImage: "play.fill")
-        }
-        Button { state.schedulesVM.scheduler.enable(s, !s.enabled) } label: {
-            Label(s.enabled ? "Disable" : "Enable",
-                  systemImage: s.enabled ? "pause.fill" : "play.fill")
-        }
-        Button { state.schedulesVM.editingSchedule = s } label: {
-            Label("Edit schedule", systemImage: "pencil")
-        }
-        Divider()
-        Button(role: .destructive) {
-            state.container.scheduleRepository.delete(s)
-            state.schedulesVM.scheduler.reload()
-        } label: {
-            Label("Delete schedule", systemImage: "trash")
         }
     }
 
@@ -611,63 +614,75 @@ struct DashboardView: View {
             .listRowSeparator(.hidden)
     }
 
-    private func workflowRow(_ wf: Workflow) -> some View {
-        Label {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(wf.name).font(DS.Typo.body)
-                if !wf.triggers.isEmpty {
-                    Text(wf.triggersSummary)
+    /// Standalone tile for the project's orchestrator — promoted above the AGENTS list because
+    /// it routes work to other agents and is not a regular agent.
+    @ViewBuilder
+    private func orchestratorPanel(_ agent: Agent) -> some View {
+        let isSelected = (selection == .agent(agent.id))
+        Button {
+            selection = .agent(agent.id)
+        } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(LinearGradient(
+                            colors: [DS.Color.warning, DS.Color.warning.opacity(0.65)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "bolt.fill")
+                        .foregroundStyle(.white)
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(agent.name).font(DS.Typo.bodyMedium)
+                        StatusBadge(text: "auto", color: DS.Color.warning)
+                    }
+                    Text(agent.description.isEmpty
+                         ? "Routes any task to the right agent or workflow."
+                         : agent.description)
                         .font(DS.Typo.caption)
                         .foregroundStyle(DS.Color.textTertiary)
                         .lineLimit(1)
                 }
+                Spacer(minLength: 0)
             }
-        } icon: {
-            Image(systemName: "rectangle.connected.to.line.below")
-                .foregroundStyle(DS.Color.purple)
+            .padding(.horizontal, DS.Space.s)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: DS.Radius.s)
+                    .fill(isSelected
+                          ? DS.Color.warning.opacity(0.16)
+                          : DS.Color.warning.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DS.Radius.s)
+                            .stroke(DS.Color.warning.opacity(isSelected ? 0.45 : 0.20), lineWidth: 1)
+                    )
+            )
+            .contentShape(Rectangle())
         }
-    }
-
-    private func scheduleRow(_ s: Schedule) -> some View {
-        Label {
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text(s.name)
-                        .font(DS.Typo.body)
-                        .strikethrough(!s.enabled)
-                    if state.schedulesVM.scheduler.isFiringNow.contains(s.name) {
-                        ProgressView().controlSize(.mini)
-                    }
-                    Spacer()
-                    if s.backend == .cloud {
-                        Image(systemName: "cloud.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(DS.Color.purple)
-                    }
-                }
-                Text(s.trigger.summary)
-                    .font(DS.Typo.caption)
-                    .foregroundStyle(DS.Color.textTertiary)
-                    .lineLimit(1)
-            }
-        } icon: {
-            Image(systemName: scheduleIcon(s))
-                .foregroundStyle(s.enabled ? DS.Color.success : DS.Color.textTertiary)
-        }
-    }
-
-    private func scheduleIcon(_ s: Schedule) -> String {
-        switch s.trigger.kind {
-        case .cron: return "clock"
-        case .once: return "clock.badge.checkmark"
-        case .onFiveHourReset: return "arrow.counterclockwise"
-        case .onWeeklyReset: return "calendar.badge.exclamationmark"
-        }
+        .buttonStyle(.plain)
+        .contextMenu { agentContextMenu(agent) }
     }
 
     private func agentRow(_ agent: Agent) -> some View {
-        let isOrch = agent.name == OrchestratorBuilder.agentName
-        return Label {
+        let isOrch = agent.isOrchestrator
+        let desc = AgentTemplate.iconDescriptor(for: agent)
+        return HStack(alignment: .top, spacing: 8) {
+            Group {
+                if isOrch {
+                    Image(systemName: "bolt.fill").foregroundStyle(DS.Color.warning)
+                } else {
+                    TemplateIcon(
+                        assetIcon: desc.asset,
+                        sfSymbol: desc.symbol,
+                        tint: desc.color,
+                        size: 14
+                    )
+                }
+            }
+            .frame(width: 16, height: 16)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     Text(agent.name).font(DS.Typo.body)
@@ -683,9 +698,6 @@ struct DashboardView: View {
                         .lineLimit(1)
                 }
             }
-        } icon: {
-            Image(systemName: isOrch ? "bolt.fill" : "person.crop.circle")
-                .foregroundStyle(isOrch ? DS.Color.warning : DS.Color.accent)
         }
     }
 
@@ -921,5 +933,19 @@ struct DashboardView: View {
             }
         }
         .designCard()
+    }
+}
+
+private struct PopoverRowButtonStyle: ButtonStyle {
+    @State private var hovered = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: DS.Radius.s)
+                    .fill(configuration.isPressed
+                          ? DS.Color.accent.opacity(0.18)
+                          : (hovered ? DS.Color.surfaceElevated : Color.clear))
+            )
+            .onHover { hovered = $0 }
     }
 }

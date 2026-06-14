@@ -118,17 +118,65 @@ enum TokenTracker {
     }
 
     private static func recentActiveSessions(sessionFiles: [URL]) -> [ActiveSession] {
-        let cutoff = Date().addingTimeInterval(-2 * 3600)
-        let recent = sessionFiles.compactMap { url -> (URL, Date)? in
-            guard let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+        let folders = activeClaudeProjectFolders()
+        guard !folders.isEmpty else { return [] }
+        let cutoff = Date().addingTimeInterval(-10 * 60)
+
+        let candidates: [(URL, Date)] = sessionFiles.compactMap { url in
+            let folder = url.deletingLastPathComponent().lastPathComponent
+            guard folders.contains(folder),
+                  let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
                   let modified = attrs.contentModificationDate,
                   modified > cutoff
             else { return nil }
             return (url, modified)
-        }.sorted { $0.1 > $1.1 }
+        }
 
-        return recent.prefix(20).compactMap { url, modified in
-            sessionSummary(url: url, lastActivity: modified)
+        var newestPerFolder: [String: (URL, Date)] = [:]
+        for (url, modified) in candidates {
+            let folder = url.deletingLastPathComponent().lastPathComponent
+            if let existing = newestPerFolder[folder], existing.1 >= modified { continue }
+            newestPerFolder[folder] = (url, modified)
+        }
+
+        return newestPerFolder.values
+            .sorted { $0.1 > $1.1 }
+            .compactMap { sessionSummary(url: $0.0, lastActivity: $0.1) }
+    }
+
+    private static func activeClaudeProjectFolders() -> Set<String> {
+        let pidsOutput = runShell("/usr/bin/pgrep", arguments: ["-x", "claude"])
+        let pids = pidsOutput
+            .split(whereSeparator: { $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !pids.isEmpty else { return [] }
+
+        let lsofOutput = runShell("/usr/sbin/lsof", arguments: ["-p", pids.joined(separator: ","), "-d", "cwd", "-Fn"])
+        var folders: Set<String> = []
+        for line in lsofOutput.split(whereSeparator: { $0.isNewline }) {
+            guard line.first == "n" else { continue }
+            let cwd = String(line.dropFirst())
+            guard cwd.hasPrefix("/") else { continue }
+            folders.insert(cwd.replacingOccurrences(of: "/", with: "-"))
+        }
+        return folders
+    }
+
+    private static func runShell(_ launchPath: String, arguments: [String]) -> String {
+        let task = Process()
+        task.launchPath = launchPath
+        task.arguments = arguments
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            return String(data: data, encoding: .utf8) ?? ""
+        } catch {
+            return ""
         }
     }
 

@@ -57,7 +57,7 @@ struct AddProjectSheet: View {
                 Button("Browse…") { browseFolder() }
             }
             if !path.isEmpty {
-                Text("Агенты будут лежать в `\(path)/.claude/agents/`")
+                Text("Agents will live in `\(path)/.claude/agents/`")
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
@@ -65,11 +65,11 @@ struct AddProjectSheet: View {
 
     private var infoCard: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Что произойдёт при добавлении:").font(.caption.weight(.semibold))
-            bullet("Создастся каталог `.claude/agents/` в проекте")
-            bullet("Создастся пустой `SHARED.md` для этого проекта")
-            bullet("В `.claude/settings.local.json` добавится SessionStart hook — Claude Code будет грузить project SHARED.md в каждой сессии в этой папке")
-            bullet("Агенты из ~/.claude/ (User global) останутся доступны как fallback")
+            Text("What happens when you add:").font(.caption.weight(.semibold))
+            bullet("A `.claude/agents/` folder will be created in the project")
+            bullet("An empty `SHARED.md` will be created for this project")
+            bullet("A SessionStart hook will be added to `.claude/settings.local.json` — Claude Code will load the project SHARED.md every session in this folder")
+            bullet("Agents from ~/.claude/ (User global) will remain available as fallback")
         }
         .padding(10)
         .background(Color.secondary.opacity(0.08))
@@ -117,11 +117,11 @@ struct AddProjectSheet: View {
         let url = URL(fileURLWithPath: trimmedPath)
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
-            error = "Папка не существует или не является директорией: \(trimmedPath)"
+            error = "Folder does not exist or is not a directory: \(trimmedPath)"
             return
         }
         if state.projectsVM.registeredProjects.contains(where: { $0.path == url.path }) {
-            error = "Проект с таким путём уже добавлен"
+            error = "A project with this path has already been added"
             return
         }
         state.projectsVM.addProject(name: trimmedName, path: url)

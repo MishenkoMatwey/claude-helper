@@ -9,6 +9,7 @@ final class AgentsViewModel: ObservableObject {
     @Published var availableMCPServers: [MCPServer] = []
     @Published var showNewAgentSheet: Bool = false
     @Published var editingAgent: Agent?
+    @Published var creatingFromTemplate: AgentTemplate?
 
     private let agentRepository: AgentRepository
     private let skillRepository: SkillRepository
@@ -23,7 +24,7 @@ final class AgentsViewModel: ObservableObject {
     }
 
     var userAgents: [Agent] {
-        agents.filter { $0.name != OrchestratorBuilder.agentName }
+        agents.filter { !$0.isOrchestrator }
     }
 
     func reload() {

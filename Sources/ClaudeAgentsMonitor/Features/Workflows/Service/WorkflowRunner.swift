@@ -314,7 +314,7 @@ enum ExecutionResumer {
                 "--agent", p.agentName,
                 "--print",
                 "--output-format", "json",
-                "Continue. Лимит сбросился, продолжай задачу с того места где прервался."
+                "Continue. The limit has reset — pick up the task where you left off."
             ]
             let outPipe = Pipe(); let errPipe = Pipe()
             process.standardOutput = outPipe

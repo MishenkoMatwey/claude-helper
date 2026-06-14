@@ -8,8 +8,8 @@ enum ScheduleStoreError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidName: return "Имя schedule: только a-z, 0-9, дефис."
-        case .alreadyExists(let n): return "Schedule '\(n)' уже существует."
+        case .invalidName: return "Schedule name: only a-z, 0-9, hyphen."
+        case .alreadyExists(let n): return "Schedule '\(n)' already exists."
         case .readFailed(let m): return "Read failed: \(m)"
         case .writeFailed(let m): return "Write failed: \(m)"
         }

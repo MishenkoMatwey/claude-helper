@@ -15,9 +15,13 @@ struct ProjectDetailView: View {
                 hero
                 statsRow
                 quickActionsCard
+                SafeAutopilotCard(project: project)
+                AgentRunsCard(projectPath: project.path)
+                if !project.isGlobal {
+                    ReviewQueueCard(projectPath: project.path)
+                }
                 agentsCard
-                workflowsCard
-                schedulesCard
+                autoRefreshCard
                 techCard
             }
             .padding(DS.Space.xl)
@@ -61,18 +65,18 @@ struct ProjectDetailView: View {
                     Label("Open in Finder", systemImage: "folder")
                 }
                 .buttonStyle(OutlineButtonStyle())
-                .help("Открыть папку проекта в Finder")
+                .help("Open project folder in Finder")
                 if !project.isGlobal {
                     Button {
                         state.projectsVM.renamingProject = project
                     } label: { Label("Rename", systemImage: "pencil") }
                         .buttonStyle(OutlineButtonStyle())
-                        .help("Изменить display name")
+                        .help("Change display name")
                     Button(role: .destructive) {
                         state.projectsVM.removeProject(project)
                     } label: { Label("Remove", systemImage: "trash") }
                         .buttonStyle(OutlineButtonStyle(tint: DS.Color.danger))
-                        .help("Удалить проект из списка app (файлы остаются на диске)")
+                        .help("Remove project from the app list (files stay on disk)")
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -84,8 +88,6 @@ struct ProjectDetailView: View {
     private var statsRow: some View {
         HStack(spacing: DS.Space.l) {
             statCard("Agents", value: counts.agents, color: DS.Color.accent, icon: "person.2.fill")
-            statCard("Workflows", value: counts.workflows, color: DS.Color.purple, icon: "rectangle.connected.to.line.below")
-            statCard("Schedules", value: counts.schedules, color: DS.Color.success, icon: "calendar")
             statCard("Total assets", value: counts.total, color: DS.Color.textSecondary, icon: "square.stack.3d.up.fill")
         }
     }
@@ -111,31 +113,10 @@ struct ProjectDetailView: View {
             HStack(spacing: DS.Space.s) {
                 quickAction(
                     label: "New agent", icon: "person.crop.circle.badge.plus",
-                    tint: DS.Color.accent, help: "Создать агента в этом проекте"
+                    tint: DS.Color.accent, help: "Create an agent in this project"
                 ) {
                     if !isCurrent { state.projectsVM.switchProject(project) }
                     state.agentsVM.showNewAgentSheet = true
-                }
-                quickAction(
-                    label: "New workflow", icon: "rectangle.connected.to.line.below",
-                    tint: DS.Color.purple, help: "Создать workflow"
-                ) {
-                    if !isCurrent { state.projectsVM.switchProject(project) }
-                    state.workflowsVM.showNewWorkflowSheet = true
-                }
-                quickAction(
-                    label: "New schedule", icon: "calendar.badge.plus",
-                    tint: DS.Color.success, help: "Создать расписание"
-                ) {
-                    if !isCurrent { state.projectsVM.switchProject(project) }
-                    state.schedulesVM.showNewScheduleSheet = true
-                }
-                quickAction(
-                    label: "Build orchestrator", icon: "bolt.fill",
-                    tint: DS.Color.warning, help: "Пересобрать orchestrator-агента из текущего состояния"
-                ) {
-                    if !isCurrent { state.projectsVM.switchProject(project) }
-                    state.workflowsVM.generateOrchestrator()
                 }
             }
         }
@@ -165,18 +146,20 @@ struct ProjectDetailView: View {
     private var agentsCard: some View {
         listCard(
             title: "Agents", count: counts.agents, icon: "person.2.fill", tint: DS.Color.accent,
-            emptyText: "Агенты не созданы",
+            emptyText: "No agents yet",
             addLabel: "New agent"
         ) {
             state.agentsVM.showNewAgentSheet = true
         } content: {
             ForEach(state.agentsVM.agents) { a in
+                let isOrch = a.isOrchestrator
+                let desc = AgentTemplate.iconDescriptor(for: a)
                 listRow(
-                    icon: a.name == OrchestratorBuilder.agentName ? "bolt.fill" : "person.crop.circle",
-                    iconColor: a.name == OrchestratorBuilder.agentName ? DS.Color.warning : DS.Color.accent,
+                    icon: isOrch ? "bolt.fill" : desc.symbol,
+                    iconColor: isOrch ? DS.Color.warning : desc.color,
                     title: a.name,
                     subtitle: a.description.isEmpty ? "(no description)" : a.description,
-                    accessory: a.name == OrchestratorBuilder.agentName ? "auto" : nil,
+                    accessory: isOrch ? "auto" : nil,
                     accessoryColor: DS.Color.warning
                 ) {
                     onSelect(.agent(a.id))
@@ -185,51 +168,125 @@ struct ProjectDetailView: View {
         }
     }
 
-    private var workflowsCard: some View {
-        listCard(
-            title: "Workflows", count: counts.workflows, icon: "rectangle.connected.to.line.below",
-            tint: DS.Color.purple,
-            emptyText: "Workflow'ов нет",
-            addLabel: "New workflow"
-        ) {
-            state.workflowsVM.showNewWorkflowSheet = true
-        } content: {
-            ForEach(state.workflowsVM.workflows) { wf in
-                listRow(
-                    icon: "rectangle.connected.to.line.below",
-                    iconColor: DS.Color.purple,
-                    title: wf.name,
-                    subtitle: wf.triggers.isEmpty ? "(no triggers)" : wf.triggersSummary,
-                    accessory: nil, accessoryColor: nil
-                ) {
-                    onSelect(.workflow(wf.id))
-                }
-            }
-        }
+    private var autoRefreshStatus: AutoRefreshStatus {
+        AutoRefreshStatus.load(projectPath: URL(fileURLWithPath: project.path))
     }
 
-    private var schedulesCard: some View {
-        listCard(
-            title: "Schedules", count: counts.schedules, icon: "calendar",
-            tint: DS.Color.success,
-            emptyText: "Расписаний нет",
-            addLabel: "New schedule"
-        ) {
-            state.schedulesVM.showNewScheduleSheet = true
-        } content: {
-            ForEach(state.schedulesVM.scheduler.schedules) { s in
-                listRow(
-                    icon: scheduleIconName(s),
-                    iconColor: s.enabled ? DS.Color.success : DS.Color.textTertiary,
-                    title: s.name,
-                    subtitle: s.trigger.summary,
-                    accessory: s.backend == .cloud ? "cloud" : nil,
-                    accessoryColor: DS.Color.purple
-                ) {
-                    onSelect(.schedule(s.id))
+    private var autoRefreshCard: some View {
+        let status = autoRefreshStatus
+        return VStack(alignment: .leading, spacing: DS.Space.s) {
+            DesignSectionHeader(title: "Auto-refresh", icon: "arrow.triangle.2.circlepath")
+
+            // Schedule row
+            HStack(spacing: 6) {
+                Image(systemName: "clock.fill")
+                    .foregroundStyle(status.launchAgentLabel != nil ? DS.Color.success : DS.Color.textTertiary)
+                if let label = status.launchAgentLabel {
+                    Text(label).font(DS.Typo.bodyMedium)
+                    if let when = status.nextScheduledRun {
+                        Text("·").foregroundStyle(DS.Color.textTertiary)
+                        Text(when).font(DS.Typo.caption).foregroundStyle(DS.Color.textSecondary)
+                    }
+                } else {
+                    Text("No LaunchAgent configured")
+                        .font(DS.Typo.caption)
+                        .foregroundStyle(DS.Color.textTertiary)
                 }
             }
+
+            // Last successful refresh per agent
+            if status.lastRefreshByAgent.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(DS.Color.textTertiary)
+                    Text("No successful refresh yet")
+                        .font(DS.Typo.caption)
+                        .foregroundStyle(DS.Color.textTertiary)
+                }
+            } else {
+                let dateFmt: DateFormatter = {
+                    let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none; return f
+                }()
+                let latest = status.lastSuccessfulRefresh.map(dateFmt.string(from:)) ?? "—"
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(DS.Color.success)
+                    Text("Last successful refresh: \(latest)")
+                        .font(DS.Typo.bodyMedium)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(status.lastRefreshByAgent.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
+                        HStack(spacing: 4) {
+                            Text("·").foregroundStyle(DS.Color.textTertiary)
+                            Text(entry.key).font(DS.Typo.caption).foregroundStyle(DS.Color.textSecondary)
+                            Spacer()
+                            Text(dateFmt.string(from: entry.value))
+                                .font(DS.Typo.caption)
+                                .foregroundStyle(DS.Color.textTertiary)
+                        }
+                    }
+                }
+                .padding(.leading, 22)
+            }
+
+            Divider().padding(.vertical, 2)
+
+            // Backups
+            HStack(spacing: 6) {
+                Image(systemName: "externaldrive.fill.badge.checkmark")
+                    .foregroundStyle(status.backups.isEmpty ? DS.Color.textTertiary : DS.Color.accent)
+                Text("Backups: \(status.backups.count)")
+                    .font(DS.Typo.bodyMedium)
+                if let last = status.lastBackup {
+                    Text("·").foregroundStyle(DS.Color.textTertiary)
+                    let bf: DateFormatter = {
+                        let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .short; return f
+                    }()
+                    Text("latest \(bf.string(from: last.date))")
+                        .font(DS.Typo.caption)
+                        .foregroundStyle(DS.Color.textSecondary)
+                }
+                Spacer()
+                if let last = status.lastBackup {
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([last.path])
+                    } label: {
+                        Label("Open", systemImage: "folder")
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderless)
+                }
+            }
+
+            if !status.backups.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    let bf: DateFormatter = {
+                        let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .short; return f
+                    }()
+                    ForEach(status.backups.prefix(5)) { b in
+                        HStack(spacing: 4) {
+                            Text("·").foregroundStyle(DS.Color.textTertiary)
+                            Text(b.id).font(DS.Typo.caption).foregroundStyle(DS.Color.textSecondary)
+                            Spacer()
+                            Text("\(b.fileCount) files · \(bf.string(from: b.date))")
+                                .font(DS.Typo.caption)
+                                .foregroundStyle(DS.Color.textTertiary)
+                        }
+                    }
+                    if status.backups.count > 5 {
+                        Text("… and \(status.backups.count - 5) more")
+                            .font(DS.Typo.caption)
+                            .foregroundStyle(DS.Color.textTertiary)
+                            .padding(.leading, 14)
+                    }
+                }
+                .padding(.leading, 22)
+            }
         }
+        .padding(DS.Space.m)
+        .background(DS.Color.surface)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m))
+        .overlay(RoundedRectangle(cornerRadius: DS.Radius.m).stroke(DS.Color.border))
     }
 
     private var techCard: some View {
@@ -273,14 +330,14 @@ struct ProjectDetailView: View {
                             .font(DS.Typo.captionMedium)
                     }
                     .buttonStyle(GhostButtonStyle(tint: tint))
-                    .help("Создать новый \(title.lowercased())")
+                    .help("Create a new \(title.lowercased())")
                 )
             )
             if count == 0 {
                 EmptyState(
                     icon: icon,
                     title: emptyText,
-                    subtitle: "Создай первый \(title.lowercased()) кнопкой выше",
+                    subtitle: "Create your first \(title.lowercased()) using the button above",
                     actionTitle: addLabel,
                     action: addAction
                 )
@@ -320,14 +377,5 @@ struct ProjectDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private func scheduleIconName(_ s: Schedule) -> String {
-        switch s.trigger.kind {
-        case .cron: return "clock"
-        case .once: return "clock.badge.checkmark"
-        case .onFiveHourReset: return "arrow.counterclockwise"
-        case .onWeeklyReset: return "calendar.badge.exclamationmark"
-        }
     }
 }

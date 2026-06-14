@@ -13,6 +13,9 @@ enum AgentLoader {
 
         return entries
             .filter { $0.pathExtension == "md" }
+            // Skip auxiliary files like `<agent>.schema.md`, `<agent>.notes.md` — they belong
+            // to an agent, they aren't agents themselves.
+            .filter { !$0.lastPathComponent.contains(".schema.md") }
             .compactMap(parse(file:))
             .sorted { $0.name < $1.name }
     }
@@ -38,7 +41,11 @@ enum AgentLoader {
             systemPrompt: bodyTrimmed,
             attachedSkills: skills,
             filePath: file,
-            memoryPath: FileManager.default.fileExists(atPath: memory.path) ? memory : nil
+            memoryPath: FileManager.default.fileExists(atPath: memory.path) ? memory : nil,
+            iconAsset: nonEmpty(fm["icon-asset"]),
+            iconSymbol: nonEmpty(fm["icon-symbol"]),
+            iconColor: nonEmpty(fm["icon-color"]),
+            role: nonEmpty(fm["role"])
         )
     }
 
@@ -64,6 +71,11 @@ enum AgentLoader {
         let fm = String(after[..<end.lowerBound])
         let body = String(after[end.upperBound...])
         return (fm, body)
+    }
+
+    private static func nonEmpty(_ s: String?) -> String? {
+        let trimmed = s?.trimmingCharacters(in: .whitespaces) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func parseYAML(_ text: String) -> [String: String] {

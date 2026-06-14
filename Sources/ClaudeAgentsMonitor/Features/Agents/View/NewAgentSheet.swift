@@ -21,6 +21,17 @@ struct NewAgentSheet: View {
     @State private var skillSearch: String = ""
     @State private var error: String?
     @State private var didLoad: Bool = false
+    @State private var iconAsset: String? = nil
+    @State private var iconSymbol: String = ""
+    @State private var iconColor: String = "blue"
+    private let brandAssets = ["clussters", "git", "jira", "confluence", "figma", "database", "github", "gitlab", "chrome", "vscode", "intellij"]
+    private let sfSymbols = [
+        "person.crop.circle", "bolt.fill", "checklist", "cylinder.split.1x2.fill",
+        "doc.richtext", "arrow.triangle.branch", "paintbrush.pointed.fill",
+        "network", "shield.fill", "magnifyingglass", "wand.and.stars",
+        "gearshape.fill", "terminal.fill", "globe", "lock.fill"
+    ]
+    private let colorChoices = ["blue", "orange", "purple", "green", "red", "gray"]
 
     private let models = ["default", "haiku", "sonnet", "opus"]
 
@@ -38,6 +49,7 @@ struct NewAgentSheet: View {
                         nameRow
                         descriptionRow
                         modelRow
+                        iconRow
                     }
                     sectionGroup(title: "Permissions", icon: "key.fill") {
                         toolsRow
@@ -95,7 +107,7 @@ struct NewAgentSheet: View {
                     Text(editing.name)
                         .font(DS.Typo.caption).foregroundStyle(DS.Color.textSecondary)
                 } else {
-                    Text("В проекте \(state.projectsVM.currentProject.name)")
+                    Text("In project \(state.projectsVM.currentProject.name)")
                         .font(DS.Typo.caption).foregroundStyle(DS.Color.textSecondary)
                 }
             }
@@ -113,8 +125,92 @@ struct NewAgentSheet: View {
             sectionLabel("Name", "Lowercase, digits, hyphen — used as filename and slug")
             TextField("e.g. dev, git, review", text: $name)
                 .textFieldStyle(.roundedBorder)
-                .disabled(editing != nil)
+            if let e = editing, e.name != name && !name.isEmpty {
+                Label("Rename will move <name>.md + memory/<name>.* files and re-key Keychain entries from '\(e.name)' to '\(name)'.",
+                      systemImage: "info.circle")
+                    .font(.caption).foregroundStyle(.orange)
+            }
         }
+    }
+
+    private var iconRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("Icon", "Brand asset (recommended) or SF Symbol fallback")
+            iconPreview
+            HStack(spacing: 6) {
+                ForEach(brandAssets, id: \.self) { a in
+                    iconChoice(asset: a, sym: nil, selected: iconAsset == a)
+                        .onTapGesture { iconAsset = a; iconSymbol = "" }
+                }
+                iconChoice(asset: nil, sym: nil, selected: iconAsset == nil && iconSymbol.isEmpty)
+                    .onTapGesture { iconAsset = nil; iconSymbol = "" }
+            }
+            FlowLayout(spacing: 6) {
+                ForEach(sfSymbols, id: \.self) { s in
+                    iconChoice(asset: nil, sym: s,
+                               selected: iconAsset == nil && iconSymbol == s)
+                        .onTapGesture { iconAsset = nil; iconSymbol = s }
+                }
+            }
+            HStack(spacing: 6) {
+                Text("Custom SF symbol:").font(.caption).foregroundStyle(.secondary)
+                TextField("any.sf.symbol.name", text: $iconSymbol)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.caption, design: .monospaced))
+                    .onChange(of: iconSymbol) { _, _ in if !iconSymbol.isEmpty { iconAsset = nil } }
+            }
+            HStack(spacing: 8) {
+                Text("Color:").font(.caption).foregroundStyle(.secondary)
+                ForEach(colorChoices, id: \.self) { c in
+                    let tint = AgentTemplate.swiftUIColor(c)
+                    Circle().fill(tint).frame(width: 22, height: 22)
+                        .overlay(Circle().stroke(iconColor == c ? Color.primary : .clear, lineWidth: 2))
+                        .overlay(Image(systemName: iconColor == c ? "checkmark" : "")
+                                    .foregroundStyle(.white)
+                                    .font(.system(size: 9, weight: .bold)))
+                        .onTapGesture { iconColor = c }
+                }
+            }
+        }
+    }
+
+    private var iconPreview: some View {
+        let tint = AgentTemplate.swiftUIColor(iconColor)
+        return HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(tint.opacity(0.15))
+                    .frame(width: 42, height: 42)
+                TemplateIcon(assetIcon: iconAsset,
+                             sfSymbol: iconSymbol.isEmpty ? "person.crop.circle" : iconSymbol,
+                             tint: tint, size: 24)
+            }
+            Text("Preview").font(.caption).foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+
+    private func iconChoice(asset: String?, sym: String?, selected: Bool) -> some View {
+        let tint = AgentTemplate.swiftUIColor(iconColor)
+        let label: String = {
+            if let a = asset { return a }
+            if let s = sym, !s.isEmpty { return s }
+            return "none"
+        }()
+        return ZStack {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(selected ? tint.opacity(0.22) : Color.secondary.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: 7)
+                            .stroke(selected ? tint : Color.secondary.opacity(0.3),
+                                    lineWidth: selected ? 1.5 : 1))
+                .frame(width: 36, height: 36)
+            if asset != nil || (sym ?? "").isEmpty == false {
+                TemplateIcon(assetIcon: asset, sfSymbol: sym ?? "questionmark",
+                             tint: tint, size: 20)
+            } else {
+                Text("∅").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .help(label)
     }
 
     private var descriptionRow: some View {
@@ -160,7 +256,7 @@ struct NewAgentSheet: View {
     private var bashRow: some View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
             sectionLabel("Bash access",
-                         "Native Claude Code только whitelist. Чтобы запретить часть git — НЕ давай `git:*`, выбирай точные пресеты ниже.")
+                         "Native Claude Code uses whitelist only. To block parts of git — do NOT grant `git:*`, pick the precise presets below.")
 
             // Active patterns chips
             if !bashAllowed.isEmpty {
@@ -276,9 +372,9 @@ struct NewAgentSheet: View {
 
     private var extraToolsRow: some View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
-            sectionLabel("MCP servers", "Подключенные MCP-серверы. Каждый агент должен явно получить доступ — по умолчанию ничего не наследуется.")
+            sectionLabel("MCP servers", "Configured MCP servers. Each agent must be granted access explicitly — nothing is inherited by default.")
             if state.agentsVM.availableMCPServers.isEmpty {
-                Text("Нет настроенных MCP серверов в ~/.claude.json. Подключи MCP в Claude Code сначала.")
+                Text("No MCP servers configured in ~/.claude.json. Configure MCP in Claude Code first.")
                     .font(DS.Typo.caption)
                     .foregroundStyle(DS.Color.textTertiary)
                     .padding(DS.Space.s)
@@ -293,9 +389,9 @@ struct NewAgentSheet: View {
             }
             Toggle("Allow ALL MCP tools (mcp__*)", isOn: $allowAllMcp)
                 .controlSize(.small)
-                .help("Универсальный wildcard — агент получит доступ ко всем MCP-тулам всех серверов")
+                .help("Universal wildcard — the agent will get access to every MCP tool of every server")
 
-            sectionLabel("Other tools", "Дополнительные tool-выражения, через запятую. Для редких случаев.")
+            sectionLabel("Other tools", "Extra tool expressions, comma-separated. For rare cases.")
             TextField("(optional, comma-separated)", text: $extraTools)
                 .textFieldStyle(.roundedBorder)
         }
@@ -329,7 +425,7 @@ struct NewAgentSheet: View {
             )
         }
         .buttonStyle(.plain)
-        .help("\(server.name) MCP server (scope: \(server.scope)). Включит mcp__\(server.name)__* в tools агента.")
+        .help("\(server.name) MCP server (scope: \(server.scope)). Will add mcp__\(server.name)__* to the agent's tools.")
     }
 
     private var skillsRow: some View {
@@ -353,7 +449,7 @@ struct NewAgentSheet: View {
                     Label("+ Browse plugins", systemImage: "puzzlepiece.extension")
                 }
                 .buttonStyle(GhostButtonStyle(tint: DS.Color.purple))
-                .help("Открыть marketplace 177+ плагинов — каждый может добавить новые скиллы")
+                .help("Open the marketplace with 177+ plugins — each can add new skills")
             }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
@@ -362,7 +458,7 @@ struct NewAgentSheet: View {
                     }
                     if filteredSkills.isEmpty {
                         Text(state.agentsVM.availableSkills.isEmpty
-                             ? "Скиллов нет — нажми ‘Browse plugins’ чтобы установить плагины с скиллами"
+                             ? "No skills yet — click 'Browse plugins' to install plugins with skills"
                              : "No skills match '\(skillSearch)'")
                             .font(DS.Typo.caption).foregroundStyle(DS.Color.textTertiary)
                             .padding(8)
@@ -459,8 +555,14 @@ struct NewAgentSheet: View {
     }
 
     private func loadIfNeeded() {
-        guard !didLoad, let agent = editing else { didLoad = true; return }
+        guard !didLoad else { return }
         didLoad = true
+
+        guard let agent = editing else {
+            // New agent — pre-select all configured MCP servers by default.
+            selectedMCPServers = Set(state.agentsVM.availableMCPServers.map(\.name))
+            return
+        }
         name = agent.name
         description = agent.description
         model = agent.model ?? "default"
@@ -491,6 +593,12 @@ struct NewAgentSheet: View {
         selectedSkills = Set(state.agentsVM.availableSkills
             .filter { attached.contains($0.name) }
             .map(\.id))
+
+        // Icon — saved frontmatter wins, otherwise fall back to template match by name.
+        let descriptor = AgentTemplate.iconDescriptor(for: agent)
+        iconAsset = agent.iconAsset ?? descriptor.asset
+        iconSymbol = agent.iconSymbol ?? (descriptor.asset == nil ? descriptor.symbol : "")
+        iconColor = agent.iconColor ?? (AgentTemplate.match(agentName: agent.name)?.color ?? "blue")
     }
 
     private func collectTools() -> [String] {
@@ -512,15 +620,34 @@ struct NewAgentSheet: View {
 
     private func save() {
         let chosenSkills = state.agentsVM.availableSkills.filter { selectedSkills.contains($0.id) }
+        let newName = name.trimmingCharacters(in: .whitespaces)
+        let agentsDir = state.container.agentRepository.agentsDirectory()
+        let memDir = agentsDir.appendingPathComponent("memory")
         do {
-            _ = try state.container.agentRepository.save(
-                name: name.trimmingCharacters(in: .whitespaces),
+            // 1. If renaming an existing agent — move files + Keychain, rewrite tools paths.
+            var tools = collectTools()
+            var prompt = systemPrompt
+            if let editing, editing.name != newName, !newName.isEmpty {
+                try AgentRename.renameArtifacts(from: editing.name, to: newName, agentsDir: agentsDir)
+                tools = AgentRename.rewriteTools(tools, from: editing.name, to: newName, memDir: memDir)
+                prompt = AgentRename.rewritePrompt(prompt, from: editing.name, to: newName)
+            }
+            // 2. Save .md with up-to-date tools + prompt (AgentWriter rebuilds Memory / Variables blocks).
+            let url = try state.container.agentRepository.save(
+                name: newName,
                 description: description,
                 model: model,
-                tools: collectTools(),
-                systemPrompt: systemPrompt,
+                tools: tools,
+                systemPrompt: prompt,
                 skills: chosenSkills,
                 overwrite: editing != nil
+            )
+            // 3. Inject icon-* frontmatter (AgentRepository signature doesn't take them yet).
+            try AgentRename.patchIconFrontmatter(
+                at: url,
+                iconAsset: iconAsset,
+                iconSymbol: iconSymbol,
+                iconColor: iconColor
             )
             state.refresh()
             dismiss()

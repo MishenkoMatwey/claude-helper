@@ -25,8 +25,12 @@ enum WorkflowLoader {
         let triggers = parseList(fm["triggers"])
         let graphURL = file.deletingLastPathComponent()
             .appendingPathComponent("\(name).graph.json")
-        let graph: WorkflowGraph = (try? Data(contentsOf: graphURL))
+        let sidecarGraph: WorkflowGraph? = (try? Data(contentsOf: graphURL))
             .flatMap { try? JSONDecoder().decode(WorkflowGraph.self, from: $0) }
+        // Sidecar is the source of truth when present. Otherwise — derive a graph from the
+        // markdown body so the BPMN editor isn't blank for hand-written workflow files.
+        let graph: WorkflowGraph = sidecarGraph
+            ?? WorkflowGraphParser.parse(markdown: body)
             ?? .empty
         return Workflow(
             id: name,

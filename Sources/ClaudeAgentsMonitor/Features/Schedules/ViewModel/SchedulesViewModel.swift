@@ -1,12 +1,9 @@
 import Foundation
-import SwiftUI
 
+/// The schedules editor UI was removed; what remains is the background
+/// `LocalScheduler` that drives rate-limit-reset resumes for agent runs.
 @MainActor
 final class SchedulesViewModel: ObservableObject {
-    @Published var showNewScheduleSheet: Bool = false
-    @Published var editingSchedule: Schedule?
-    @Published var pendingSelectionScheduleId: String?
-
     let scheduler: LocalScheduler
 
     init() {

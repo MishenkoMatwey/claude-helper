@@ -7,9 +7,9 @@ enum WorkflowWriterError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidName: return "Имя workflow: только a-z, 0-9, дефис."
-        case .alreadyExists(let name): return "Workflow '\(name)' уже существует."
-        case .writeFailed(let msg): return "Не удалось записать: \(msg)"
+        case .invalidName: return "Workflow name: only a-z, 0-9, hyphen."
+        case .alreadyExists(let name): return "Workflow '\(name)' already exists."
+        case .writeFailed(let msg): return "Failed to write: \(msg)"
         }
     }
 }

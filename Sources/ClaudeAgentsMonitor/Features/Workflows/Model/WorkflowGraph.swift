@@ -60,46 +60,96 @@ struct WorkflowGraph: Codable, Hashable {
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
-    /// Renders the graph back into a markdown step list for the orchestrator to read.
+    /// Renders the graph into a markdown step list. Round-trippable with `WorkflowGraphParser.parse`.
+    ///
+    /// Format:
+    /// ```
+    /// ## Steps
+    ///
+    /// ### Start — <id>
+    ///
+    /// ### Step <N> — <agent-name> [id=<node-id>]
+    /// **Prompt:**
+    /// <prompt body>
+    ///
+    /// ### Gateway — <label> [id=<node-id>]
+    /// - if `<condition>` → <target-id>
+    /// - if `<condition>` → <target-id>
+    ///
+    /// ### Parallel — <label> [id=<node-id>]
+    /// - <target-id> (priority <N>)
+    ///
+    /// ### End — <id> (<label>)
+    /// ```
     func toMarkdownSteps() -> String {
         guard !nodes.isEmpty else { return "" }
+
         var lines: [String] = ["## Steps", ""]
-        // Sequential walk from start, expanding by edges.
+
+        // Walk graph in deterministic order: start → BFS through outgoing edges.
+        var order: [String] = []
         var visited: Set<String> = []
-        let start = nodes.first { $0.kind == .start }?.id ?? nodes.first?.id ?? ""
-        var stack: [String] = [start]
-        var index = 0
-        while let cur = stack.popLast() {
-            guard !visited.contains(cur), let n = node(cur) else { continue }
+        let starts = nodes.filter { $0.kind == .start }
+        var queue: [String] = starts.map(\.id)
+        if queue.isEmpty, let first = nodes.first { queue = [first.id] }
+
+        while !queue.isEmpty {
+            let cur = queue.removeFirst()
+            guard !visited.contains(cur), node(cur) != nil else { continue }
             visited.insert(cur)
-            let outgoing = edges.filter { $0.from == cur }
-            switch n.kind {
-            case .start:
-                lines.append("**Start**")
-            case .end:
-                lines.append("**End**")
-            case .agent:
-                index += 1
-                lines.append("\(index). **\(n.label)** — \(n.prompt.isEmpty ? "(no prompt)" : n.prompt)")
-            case .gateway:
-                lines.append("⊳ **Gateway**: \(n.label)")
-                for e in outgoing {
-                    if let target = node(e.to) {
-                        lines.append("   - if `\(e.condition)` → \(target.label)")
-                    }
-                }
-            case .parallel:
-                lines.append("⫼ **Parallel branches** (priority highest first):")
-                for e in outgoing {
-                    if let target = node(e.to) {
-                        lines.append("   - \(target.label) (priority \(target.priority))")
-                    }
-                }
-            }
-            for e in outgoing.sorted(by: { ($0.condition < $1.condition) }) {
-                if !visited.contains(e.to) { stack.append(e.to) }
+            order.append(cur)
+            let outs = edges.filter { $0.from == cur }
+                .sorted { ($0.condition, $0.to) < ($1.condition, $1.to) }
+            for e in outs where !visited.contains(e.to) {
+                queue.append(e.to)
             }
         }
-        return lines.joined(separator: "\n")
+        // Append any disconnected nodes after the connected walk.
+        for n in nodes where !visited.contains(n.id) {
+            order.append(n.id)
+        }
+
+        var stepIndex = 0
+        for id in order {
+            guard let n = node(id) else { continue }
+            let outs = edges.filter { $0.from == id }
+                .sorted { ($0.condition, $0.to) < ($1.condition, $1.to) }
+            switch n.kind {
+            case .start:
+                lines.append("### Start — \(n.id)")
+                lines.append("")
+            case .end:
+                let labelSuffix = n.label.isEmpty || n.label == "End" ? "" : " (\(n.label))"
+                lines.append("### End — \(n.id)\(labelSuffix)")
+                lines.append("")
+            case .agent:
+                stepIndex += 1
+                let agentName = n.label.isEmpty ? "agent" : n.label
+                lines.append("### Step \(stepIndex) — \(agentName) [id=\(n.id)]")
+                if !n.prompt.isEmpty {
+                    lines.append("**Prompt:**")
+                    lines.append(n.prompt)
+                }
+                lines.append("")
+            case .gateway:
+                let label = n.label.isEmpty ? "decision" : n.label
+                lines.append("### Gateway — \(label) [id=\(n.id)]")
+                for e in outs {
+                    lines.append("- if `\(e.condition)` → \(e.to)")
+                }
+                lines.append("")
+            case .parallel:
+                let label = n.label.isEmpty ? "parallel" : n.label
+                lines.append("### Parallel — \(label) [id=\(n.id)]")
+                for e in outs {
+                    let target = node(e.to)
+                    let prio = target?.priority ?? 0
+                    lines.append("- \(e.to) (priority \(prio))")
+                }
+                lines.append("")
+            }
+        }
+
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
