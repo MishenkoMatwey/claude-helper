@@ -109,7 +109,7 @@ actor ClaudeAPIService {
         req.setValue("claude-cli/2.1.126 (external, cli)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: req)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            if http.statusCode == 401 { cachedToken = nil }
+            if http.statusCode == 401 { invalidateToken() }
             if http.statusCode == 429 {
                 let secs = parseRetryAfter(http) ?? 60
                 let retryAt = Date().addingTimeInterval(secs)
@@ -129,14 +129,56 @@ actor ClaudeAPIService {
         return nil
     }
 
+    /// On-disk cache of the OAuth token so we don't read `Claude Code-credentials`
+    /// from Keychain on every launch (each cold read pops a macOS keychain prompt).
+    /// We only re-read Keychain when the cached token is missing or near expiry.
+    private static let tokenCacheURL: URL = {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ClaudeAgentsMonitor", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("usage-token.json")
+    }()
+
     private func fetchToken() throws -> String {
         if let t = cachedToken { return t }
-        guard let t = readKeychainToken() else { throw ClaudeAPIError.noToken }
-        cachedToken = t
-        return t
+        // Disk cache — avoids a Keychain read (and its prompt) on cold start.
+        if let cached = readDiskToken() {
+            cachedToken = cached
+            return cached
+        }
+        guard let kc = readKeychainToken() else { throw ClaudeAPIError.noToken }
+        cachedToken = kc.token
+        writeDiskToken(kc.token, expiresAtMillis: kc.expiresAt)
+        return kc.token
     }
 
-    private func readKeychainToken() -> String? {
+    /// Forget both caches (called on 401 — the token rotated, re-read source).
+    private func invalidateToken() {
+        cachedToken = nil
+        try? FileManager.default.removeItem(at: Self.tokenCacheURL)
+    }
+
+    private func readDiskToken() -> String? {
+        guard let data = try? Data(contentsOf: Self.tokenCacheURL),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = obj["token"] as? String else { return nil }
+        // Honour expiry with a 5-minute safety margin; treat missing expiry as valid.
+        if let exp = obj["expiresAt"] as? Double {
+            if Date().timeIntervalSince1970 * 1000 > exp - 5 * 60 * 1000 { return nil }
+        }
+        return token
+    }
+
+    private func writeDiskToken(_ token: String, expiresAtMillis: Double?) {
+        var obj: [String: Any] = ["token": token]
+        if let exp = expiresAtMillis { obj["expiresAt"] = exp }
+        guard let data = try? JSONSerialization.data(withJSONObject: obj) else { return }
+        try? data.write(to: Self.tokenCacheURL, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                               ofItemAtPath: Self.tokenCacheURL.path)
+    }
+
+    private func readKeychainToken() -> (token: String, expiresAt: Double?)? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "Claude Code-credentials",
@@ -149,6 +191,8 @@ actor ClaudeAPIService {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
         let creds = (json["claudeAiOauth"] as? [String: Any]) ?? json
-        return creds["accessToken"] as? String
+        guard let token = creds["accessToken"] as? String else { return nil }
+        let expiresAt = (creds["expiresAt"] as? Double) ?? (creds["expiresAt"] as? Int).map(Double.init)
+        return (token, expiresAt)
     }
 }
