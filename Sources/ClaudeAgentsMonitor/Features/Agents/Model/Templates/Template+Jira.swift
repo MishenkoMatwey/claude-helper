@@ -67,6 +67,7 @@ extension AgentTemplate {
         python3 .claude/agents/scripts/jira.py backlog --team <team>
         python3 .claude/agents/scripts/jira.py boards
         python3 .claude/agents/scripts/jira.py search "<JQL>" --max 30
+        python3 .claude/agents/scripts/jira.py transition --to Done CLS-1 CLS-2 …   # массовый перевод статуса (батч, НЕ по одному!)
         python3 .claude/agents/scripts/jira.py create --type Bug --summary "..." --assignee <accountId> --sprint active
         ```
 

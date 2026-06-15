@@ -310,6 +310,38 @@ def cmd_release_notes(args):
         print()
 
 
+def cmd_transition(args):
+    """Move one or many issues to a target status — loops in-script (fast, no
+    per-issue LLM round trips). For each key: find the transition whose target
+    status matches `--to`, then POST it."""
+    target = args.to.strip().lower()
+    results = []
+    for key in args.keys:
+        try:
+            data = get(f"/rest/api/3/issue/{key}/transitions")
+            trans = data.get("transitions", [])
+            match = next((t for t in trans
+                          if (t.get("to", {}).get("name", "").lower() == target
+                              or t.get("name", "").lower() == target)), None)
+            if not match:
+                avail = ", ".join(t.get("to", {}).get("name", t.get("name", "?")) for t in trans)
+                results.append((key, "skip", f"нет перехода в '{args.to}' (есть: {avail})"))
+                continue
+            post(f"/rest/api/3/issue/{key}/transitions", {"transition": {"id": match["id"]}})
+            results.append((key, "ok", args.to))
+        except SystemExit:
+            results.append((key, "fail", "HTTP error"))
+    if args.json:
+        print(json.dumps([{"key": k, "status": s, "detail": d} for k, s, d in results],
+                         ensure_ascii=False, indent=2))
+        return
+    ok = sum(1 for _, s, _ in results if s == "ok")
+    print(f"Переведено в '{args.to}': {ok}/{len(results)}")
+    for k, s, d in results:
+        mark = {"ok": "✓", "skip": "—", "fail": "✗"}.get(s, "?")
+        print(f"  {mark} {k}: {d}")
+
+
 def cmd_create(args):
     fields: dict = {
         "project": {"key": PROJECT},
@@ -381,6 +413,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--team", choices=list(TEAMS))
     sp.add_argument("--jql", help="custom JQL instead of --version")
     sp.set_defaults(fn=cmd_release_notes)
+
+    sp = add("transition", "move one or many issues to a status (batch)")
+    sp.add_argument("--to", required=True, help="target status name, e.g. Done")
+    sp.add_argument("keys", nargs="+", help="issue keys, e.g. CLS-1 CLS-2")
+    sp.set_defaults(fn=cmd_transition)
 
     sp = add("create", "create an issue")
     sp.add_argument("--type", default="Task")
